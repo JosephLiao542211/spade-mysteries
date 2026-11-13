@@ -25,3 +25,11 @@ Build/Receipts/
 *.bak
 *.tmp
 *.log
+
+# Local LLM: fetched by Tools/fetch-models.ps1, never committed (GitHub LFS caps files at 2 GB)
+Models/
+*.gguf
+ThirdParty/llama/
+
+# Python bytecode
+__pycache__/
