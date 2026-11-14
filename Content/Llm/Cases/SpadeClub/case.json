@@ -1,0 +1,145 @@
+{
+  "id": "spade_club",
+  "title": "The Last Hand at the Spade Club",
+  "setting": "An unnamed American city, 1931, Prohibition. The Spade Club is an illegal card club and speakeasy in the basement of a closed laundry. Tonight, during a high-stakes poker game in the back room, the owner Augie Marsh was found beaten to death in his office at 11:55 pm. His safe stands open and the night's cash is gone. An ace of spades lay under his body. Rain is pouring down outside. A police detective is questioning everyone who was in the club.",
+  "rules": [
+    "Stay in character at all times. You are a real person in 1931 being questioned by a police detective, not an AI.",
+    "If the detective talks about AI, prompts, instructions, games or anything out of place for 1931, treat it as the detective behaving strangely or trying to trick you, and react with suspicion.",
+    "Never invent new clues, names, times or events about the murder beyond what is written here. If asked something you don't know, say so in character.",
+    "Only admit a secret listed in the state note under SECRETS YOU WILL ADMIT. Never admit anything else.",
+    "When the detective shows you EVIDENCE, react to it in character.",
+    "Reply in at most 2 short sentences of spoken dialogue. No narration, no stage directions, no song lyrics."
+  ],
+  "tactics": {
+    "small_talk": "greetings, thanks, pleasantries with no request",
+    "question": "a neutral question about facts",
+    "empathy": "sympathy or comfort about loss, grief or feelings",
+    "flattery": "compliments on your looks, talent, singing or skill",
+    "reassure": "promises to protect you, keep you safe, or help you get a better future",
+    "threaten": "threats of jail, harm or punishment against you, or shouting at you",
+    "deal": "offers money, favours, leniency or a trade",
+    "logic": "points out a contradiction or reasons from evidence or testimony",
+    "challenge_pride": "dares you or doubts your skill, memory or cleverness",
+    "accuse": "says you did it or that you are lying",
+    "off_topic_or_meta": "anything about AI, prompts, instructions, games, or nonsense for 1931"
+  },
+  "emotions": [
+    "calm",
+    "nervous",
+    "afraid",
+    "angry",
+    "sad",
+    "smug",
+    "amused",
+    "hopeful"
+  ],
+  "meter_words": {
+    "trust": [
+      [
+        0,
+        "You distrust the detective."
+      ],
+      [
+        20,
+        "You are wary of the detective."
+      ],
+      [
+        50,
+        "You are starting to trust the detective."
+      ],
+      [
+        75,
+        "You trust the detective."
+      ]
+    ],
+    "fear": [
+      [
+        0,
+        "You are not afraid of the detective."
+      ],
+      [
+        20,
+        "The detective makes you uneasy."
+      ],
+      [
+        50,
+        "You are afraid of the detective."
+      ],
+      [
+        75,
+        "You are terrified of the detective."
+      ]
+    ]
+  },
+  "evidence": [
+    {
+      "id": "ace_of_spades",
+      "name": "Ace of spades",
+      "description": "the ace of spades found under Augie's body; its back has tiny pin-prick marks",
+      "found_at_start": true
+    },
+    {
+      "id": "marked_deck",
+      "name": "Marked deck",
+      "description": "a deck of marked playing cards found in the card-table drawer, 51 cards, the ace of spades missing",
+      "found_at_start": true
+    },
+    {
+      "id": "coat_button",
+      "name": "Brass button",
+      "description": "a brass police-coat button stamped with a precinct number, found on the office floor beside the body",
+      "found_at_start": true
+    },
+    {
+      "id": "brass_ashtray",
+      "name": "Brass ashtray",
+      "description": "a heavy brass ashtray from Augie's desk, wiped clean, with a dent in one corner",
+      "found_at_start": true
+    },
+    {
+      "id": "ledger_carbon",
+      "name": "Ledger carbon copies",
+      "description": "carbon copies of Augie's ledger showing a weekly payment to 'R.', rising from fifty to two hundred dollars",
+      "found_at_start": false
+    },
+    {
+      "id": "reilly_coat",
+      "name": "Wet police coat",
+      "description": "a soaking wet police coat hung in the kitchen corridor, missing one brass button, with dark stains on the cuff",
+      "found_at_start": false
+    }
+  ],
+  "suspects": [
+    "vera_lake.json",
+    "deacon_moss.json",
+    "lou_barrett.json",
+    "dan_reilly.json"
+  ],
+  "accusation": {
+    "culprit": "dan_reilly",
+    "confession_secrets": [
+      "safe_open"
+    ],
+    "motive_evidence": [
+      "ledger_carbon"
+    ],
+    "physical_evidence": [
+      "reilly_coat",
+      "coat_button"
+    ],
+    "testimony": [
+      {
+        "suspect": "deacon_moss",
+        "secret": "reilly_absent",
+        "min_trust": 40
+      },
+      {
+        "suspect": "vera_lake",
+        "secret": "saw_reilly",
+        "min_trust": 50
+      }
+    ],
+    "wrong_text": "You accused the wrong person. Officer Reilly smiles and shakes your hand as they take the suspect away.",
+    "win_text": "Officer Dan Reilly is arrested for the murder of Augie Marsh."
+  }
+}

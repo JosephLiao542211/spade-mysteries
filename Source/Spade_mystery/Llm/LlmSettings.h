@@ -44,9 +44,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
 	int32 GpuLayers = 99;
 
-	/** Total context; split evenly across ParallelSlots (one slot per suspect). */
+	/** Total context; split evenly across ParallelSlots (one slot per suspect). 4 x 4096: with the Spade Club
+	 *  prompt (~860 static tokens), 2048 per slot overflowed after ~11 turns. Costs only ~70 MB more on E4B. */
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
-	int32 ContextSize = 8192;
+	int32 ContextSize = 16384;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
 	int32 ParallelSlots = 4;
@@ -55,8 +56,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
 	float HealthTimeoutSeconds = 120.f;
 
+	/** Case folder relative to Content, loaded by the debug chat (later: by the case-select screen). */
 	UPROPERTY(Config, EditAnywhere, Category = "Chat")
-	int32 MaxTokens = 120;
+	FString CaseDir = TEXT("Llm/Cases/SpadeClub");
+
+	/** Replies are ~75 tokens with the 6-field schema; 160 leaves headroom. */
+	UPROPERTY(Config, EditAnywhere, Category = "Chat")
+	int32 MaxTokens = 160;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Chat")
 	float Temperature = 0.8f;

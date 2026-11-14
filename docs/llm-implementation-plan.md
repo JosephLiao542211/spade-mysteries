@@ -1,7 +1,8 @@
 # Local LLM Implementation Plan
 
 How the suspects' dialogue will run on a local model inside Spade Mystery (UE 5.8).
-Status: Day-1 spike done for the model side (results in §13); Unreal code written but not yet compiled.
+Status: Day-1 spike done for the model side (§13). Trust/fear meter system and the Spade Club case built and
+benchmarked (§14, case file in `docs/cases/spade-club.md`). Unreal code written but not yet compiled.
 Researched 2026-11-13.
 
 ## 1. Where the repo stands
@@ -15,12 +16,12 @@ Researched 2026-11-13.
 ## 2. Architecture
 
 ```
-┌──────────────────────── Unreal (game process) ────────────────────────┐
-│ UInterrogationSubsystem   game truth: pressure, facts, claims, history │
-│        │ builds prompt + per-request JSON schema                       │
-│ FPromptBuilder ──► ULlmClient ──HTTP (127.0.0.1)──┐                    │
-│ ULlmServerSubsystem  launches / watches / kills   │                    │
-└───────────────────────────────────────────────────┼────────────────────┘
+┌──────────────────────── Unreal (game process) ─────────────────────────┐
+│ UInterrogationSession   game truth: meters, secrets, evidence, history │
+│        │ LlmEngine builds prompt + per-request JSON schema             │
+│        └──────────────────────────► HTTP (127.0.0.1) ──┐               │
+│ ULlmServerSubsystem  launches / watches / kills        │               │
+└────────────────────────────────────────────────────────┼───────────────┘
                                                     ▼
                  llama-server.exe (llama.cpp sidecar, OpenAI-compatible API)
                  model: gemma-4-E4B-it GGUF (+ mmproj only if we use audio)
@@ -41,7 +42,7 @@ llama-server.exe -m Models/gemma-4-E4B-it-Q4_K_M.gguf
   --host 127.0.0.1 --port <free port>
   -ngl 99 -fa on
   -ctk q8_0 -ctv q8_0            # quantized KV cache: about half the memory, needs flash attention
-  -c 8192 --parallel 4           # 4 slots x 2048 tokens: one per suspect; size to the measured need
+  -c 16384 --parallel 4          # 4 slots x 4096 tokens, one per suspect (2048 overflowed after ~11 turns, §14)
   -t <physical cores - 2>        # leave CPU for the game thread
   --jinja --no-webui
   --reasoning off --reasoning-budget 0   # required: see §4
@@ -63,9 +64,10 @@ llama-server.exe -m Models/gemma-4-E4B-it-Q4_K_M.gguf
 - **Pin one llama.cpp build** for the whole jam and record its tag in this doc. The API and slot-cache
   behaviour have changed between releases.
 
-## 4. Requests (`ULlmClient`)
+## 4. Requests (`UInterrogationSession`)
 
-One `POST /v1/chat/completions` per player line. Add `HTTP`, `Json`, `JsonUtilities` to `Spade_mystery.Build.cs`.
+One `POST /v1/chat/completions` per player line or evidence presentation. `HTTP`, `Json`, `Sockets`, `Slate`
+are in `Spade_mystery.Build.cs`.
 
 ```jsonc
 {
@@ -73,41 +75,44 @@ One `POST /v1/chat/completions` per player line. Add `HTTP`, `Json`, `JsonUtilit
   "id_slot": 2,                     // suspect's own slot, keeps their prompt prefix cached
   "cache_prompt": true,
   "temperature": 0.8,
-  "max_tokens": 120,
+  "max_tokens": 160,
   "response_format": { "type": "json_schema", "json_schema": { "schema": { ... } } }
 }
 ```
 
-**The schema is built fresh for each request** so the model physically cannot name a fact the game
+**The schema is built fresh for each request** so the model physically cannot name a secret the game
 hasn't made available:
 
 ```jsonc
 {
   "type": "object",
   "properties": {
-    "t": { "enum": ["small_talk","question","empathy","intimidate","bribe",
-                    "logic","accuse","off_topic_or_meta"] },        // player's tactic
-    "e": { "enum": ["calm","nervous","angry","sad","smug","afraid"] }, // emotion
-    "r": { "type": "string", "maxLength": 300 },                   // reply
-    "f": { "enum": ["none", "saw_julian", "left_kitchen"] }        // fact the reply admits: only currently AVAILABLE facts
+    "t": { "enum": ["small_talk","question","empathy","flattery","reassure","threaten","deal",
+                    "logic","challenge_pride","accuse","off_topic_or_meta"] }, // detective's tactic
+    "c": { "enum": ["ace_of_spades", "...", "none"] },   // evidence the detective claims to HAVE (bluff check)
+    "g": { "enum": ["deacon_moss", "...", "none"] },     // whose words the detective is repeating (gossip)
+    "f": { "enum": ["none", "augie_scared"] },           // secret admitted now: only currently UNLOCKED ones
+    "e": { "enum": ["calm","nervous","afraid","angry","sad","smug","amused","hopeful"] },
+    "r": { "type": "string", "maxLength": 300 }          // spoken reply
   },
-  "required": ["t","e","r","f"]
+  "required": ["t","c","g","f","e","r"]
 }
 ```
 
-- Keys are one letter because every output token costs time on weak machines (§7.4). Code maps them to
-  readable names (`PlayerTactic`, `Emotion`, `RevealFact`, `Reply`).
-- Field order is deliberate: classifying the tactic first acts as a short "think" step; the reply comes
-  next so the typewriter can start as soon as `"r":"` appears in the stream; the reveal flag comes **after**
-  the reply so it describes what was actually said. (Spike: with `f` before `r`, E2B flagged a reveal its
-  reply never made.)
-- Define each tactic in one line in the static prompt (see `Content/Llm/case.json`). Without definitions,
-  E2B labelled greetings "empathy" and the jailbreak "intimidate"; with them, both came out right.
-- **When code accepts a reveal, show a clue card with the fact's canonical text.** E2B's wording and flag
-  still disagree in about 1 of 12 turns, so the player must get the clue from the game, not only from the model's line.
-- `t` is the model's classification; **code** applies it to the pressure meter using that suspect's
-  multipliers. The model never owns the meter.
-- `f` is a request; code accepts it only if that fact's rules allow it (pressure threshold, evidence shown).
+- Keys are one letter because every output token costs time on weak machines (§7.4).
+- **The model only classifies; code owns every meter.** `t` drives that suspect's tactic effects; `c` is
+  compared with the player's inventory (held → evidence effects, not held → **bluff**); `g` applies gossip
+  costs to the quoted suspect. See §14 and `docs/cases/spade-club.md`.
+- **Field order:** classification first; then `f`, the decision to admit; then `r`, which carries it.
+  With `f` after `r`, E4B never admitted anything (§14); with `f` before `r` and a **topic** per secret,
+  it admitted on the first matching question. `r` still comes last, so streaming can start the typewriter
+  on `"r":"`.
+- **Define each tactic in one line** in the static prompt (`case.json` → `tactics`). Threats are defined as
+  "against you", because "I'll make sure he can't touch you" was read as a threat.
+- **When code accepts a reveal, show a clue card with the secret's canonical text** (the route's text), so
+  the player gets the clue even when the model's wording drifts.
+- **Show the player how their line was read** ("Vera took that as a threat"). E4B gets about 85% of tactics
+  right; showing the reading turns the remaining misreads into feedback the player can learn from.
 - **Thinking must be blocked at the server:** `--reasoning off --reasoning-budget 0`. Gemma 4 sometimes opens
   a `<|channel>thought` block on its own even though its template defaults to no thinking; that uses up
   `max_tokens` and returns an empty reply. Spike, one turn replayed 15×: `--reasoning off` alone 11/15 valid,
@@ -127,8 +132,9 @@ Otherwise a pressure change forces the whole history to be re-read, which takes 
    as the detective acting strangely"). Keep it short: aim for ≤ 600 tokens.
 2. **History (append-only):** past exchanges, exactly as sent before. Never rewritten.
 3. **State note (changes every turn, always last):** one short message just before the player's line,
-   holding the pressure level as words ("you are rattled and slipping"), facts currently AVAILABLE
-   (with "only admit under pressure" wording), and the game-generated summary.
+   holding each meter as words ("You are starting to trust the detective." / "Your pride is stung."), notes
+   from active rules ("You are frightened, so you lie..."), the secrets currently unlocked, each as
+   "If asked about <topic>: <text>", and what the suspect has already admitted.
 4. The new player line.
 
 Result: each turn reads only the state note, the player line and the previous reply (about 100–200 tokens),
@@ -142,17 +148,17 @@ the last 8 in one go and fold the dropped part into the summary. The cache break
 which facts were admitted, so it writes "The detective has shown you X. You have admitted Y." Deterministic,
 free, no extra model call.
 
-**Evidence presentation** is a game event. Code checks `Evidence.Contradicts` against the suspect's
-claim IDs, applies a big pressure jump / unlocks facts, then injects a narration message, for example:
-`[The detective places the torn train ticket on the table. It contradicts your claim that you never left town.]`
+**Evidence presentation** is a game event. Code applies that suspect's effects for the item (once per
+suspect), then sends a narration message so the suspect reacts, for example:
+`[EVIDENCE] The detective places this on the table: a brass police-coat button stamped with a precinct number...`
 
 **Input hygiene:** cap player text (about 300 chars), strip chat-template tokens (`<start_of_turn>`, `<|im_start|>` and similar).
 
 ## 6. Data and packaging
 
-- **Suspects:** `USuspectDefinition : UPrimaryDataAsset` with name, personality prompt, voice ID,
-  tactic→pressure multipliers, `Facts[]` (ID, text, unlock rule), `Claims[]`.
-  **Case:** `UCaseDefinition` with suspects, evidence (each with `Contradicts[]`), culprit.
+- **Cases:** plain JSON in `Content/Llm/Cases/<Case>/` (`case.json` + one file per suspect), read at runtime
+  and staged as UFS (`DirectoriesToAlwaysStageAsUFS=Llm`). JSON instead of data assets so the Python harness
+  and Unreal read the same files and writers can edit them without the editor. Format: `docs/cases/spade-club.md`.
 - **Binaries:** `ThirdParty/llama/<build>/` staged with `RuntimeDependencies` in Build.cs, or as a
   non-UFS directory in packaging settings, so the .exe and DLLs sit on disk next to the game.
 - **Model:** `Models/*.gguf`, staged as non-UFS (never inside the .pak). Not committed; add
@@ -202,7 +208,7 @@ allow overriding it in the options menu.
 - **Per-layer embeddings already stay in system RAM:** E2B (3.1 GB file) uses only ~1.6 GB of video memory
   with `-ngl 99`, and adding `--override-tensor per_layer_token_embd=CPU` changed nothing. No flag needed.
 - Quantized KV cache (`-ctk q8_0 -ctv q8_0`) and a context sized to the measured need (start at
-  4 × 2048 tokens, not 16k).
+  4 × 4096 tokens; 4 × 2048 overflowed with the Spade Club prompt, §14).
 
 ### 7.4 Fewer tokens, and hide the wait
 
@@ -253,21 +259,25 @@ allow overriding it in the options menu.
 ## 10. Code layout
 
 ```
-Source/Spade_mystery/
-  Llm/LlmServerSubsystem.{h,cpp}       launch, health, port, kill
-  Llm/LlmClient.{h,cpp}                HTTP + JSON, schema building, response parsing
-  Interrogation/SuspectDefinition.h    data assets
-  Interrogation/CaseDefinition.h
-  Interrogation/InterrogationSubsystem.{h,cpp}   pressure, facts, history, evidence events
-  Interrogation/PromptBuilder.{h,cpp}
+Source/Spade_mystery/Llm/
+  LlmSettings.h                        Project Settings > Game > Local LLM
+  LlmServerSubsystem.{h,cpp}           launch, health, port, CPU fallback, kill
+  LlmCaseData.{h,cpp}                  case/suspect structs + JSON loading
+  LlmEngine.{h,cpp}                    meters, secret keys, rules, prompt, schema, turn resolution, accusation
+  InterrogationSession.{h,cpp}         one playthrough: state, inventory, HTTP, OnReply delegate
+  LlmDebugChatSubsystem.{h,cpp}        "Llm.DebugChat" Slate window (spike only)
+Content/Llm/Cases/SpadeClub/           case.json + one JSON per suspect
 Tools/
   fetch-models.ps1                     pinned downloads + SHA-256
-  llm-harness/                         run suspect prompts against llama-server outside Unreal
+  llm-harness/engine.py                Python copy of LlmEngine (keep in sync)
+  llm-harness/test_engine.py           model-free rule tests
+  llm-harness/bench.py                 scripted interrogations against llama-server
+  llm-harness/scripts/spade_club.json  the scripts, with expected tactic labels and reveals
 ```
 
-The **prompt harness** (small Python or PowerShell script that reuses the same prompt templates) lets
-writers tune personalities without launching the editor. Keep the templates in plain text files that
-both the harness and Unreal read.
+`engine.py` and `LlmEngine.cpp` implement the same rules and build the same prompt text. Writers and
+designers tune a case by editing its JSON, running `test_engine.py` (instant), then `bench.py` (with the model),
+without opening the editor.
 
 ## 11. Milestones
 
@@ -285,9 +295,11 @@ both the harness and Unreal read.
 8. Suspect pre-loading during the loading screen; frame-rate cap during interrogations.
 
 **Days 3–5: interrogation loop**
-9. Suspect/Case data assets, pressure meter, fact gating, per-suspect slots, append-only history with big-step trimming.
-10. Evidence presentation + contradiction checks.
-11. Accusation flow and ending.
+9. ~~Case data, trust/fear/personal meters, secret keys, per-suspect slots, append-only history~~ (done, §14).
+10. ~~Evidence presentation, bluffs, gossip~~ (done in engine and debug window, §14).
+11. Accusation flow (rules done, §14) and the ending scene.
+12. Real interrogation UI: suspect portraits whose expression follows `e`, "how your line was read" feedback,
+    clue cards, evidence table.
 
 **Afterwards:** voice in/out (off by default on low tiers), prompt tuning with the harness, re-test on a real weak PC.
 
@@ -339,6 +351,46 @@ Raw results and transcripts: `Tools/llm-harness/results/`.
 Slate debug window (console command `Llm.DebugChat`). **Not compiled yet**: Unreal is not installed on the
 machine the spike ran on. Next: build on a machine with UE 5.8, run `Llm.DebugChat` in PIE, then package
 and test on a weak PC.
+
+## 14. Trust/fear meter system: Spade Club results (2026-11-13)
+
+The single pressure meter is replaced by per-suspect **trust**, **fear** and one **personal drive** (hope,
+pride, guilt, anger/cornered), with **secret keys** (meter conditions, alternative routes with weaker
+versions), **rules** (lying while scared, panic shutdowns, walking out), **evidence**, **bluffs** and **gossip**.
+Design and numbers: `docs/cases/spade-club.md`. Engine tests (`test_engine.py`): 21/21 pass.
+
+Six scripted interrogations (`scripts/spade_club.json`), each line tagged with the tactic a human would expect:
+
+| Script | What it tests | E4B GPU | E2B GPU |
+|---|---|---|---|
+| vera_trust | trust + hope route, 2 secrets | 1/2 secrets (a protective line read as a threat) | 1/2 |
+| vera_scared | threats make her lie | 0/0 secrets, correct | correct |
+| moss_pride | flattery fails, bluff caught, pride route | 1/1, bluff caught | 1/1, bluff caught |
+| lou_fear_then_guilt | fear sweet spot, panic, guilt route, grants evidence | **3/3** | 1/3 |
+| reilly_cornered | evidence + testimony until he slips | **2/2, accusation WIN** | 2/2, WIN |
+| reilly_hothead | threats make him walk out | walks out, correct | **does not walk out** |
+| **Tactic labels correct** | | **39/46 (85%)** | 33/47 (70%) |
+| Time per reply | | 0.8 s | 0.55 s (CPU 4 threads: 4.1–4.5 s) |
+
+Video memory with E4B: 3.27 GB. Static prompt: ~860 tokens per suspect (cached); tokens read per turn ~200;
+reply ~78 tokens.
+
+**What we learned**
+1. **Secrets need a topic, and `f` must come before `r`.** With a bare list of "secrets you will admit" and
+   `f` after the reply, E4B never admitted anything. With "If asked about <topic>: <text>" and `f` first, it
+   admitted on the first matching question every time.
+2. **2048 tokens per slot is too small** for this prompt: replies failed after ~11 turns. 4 × 4096 fixes it for
+   +70 MB of video memory.
+3. **"Asking about" is not "claiming to have".** "Did anyone keep copies?" was tagged as claiming the ledger,
+   so the engine saw a bluff. The `c` definition now says so explicitly.
+4. **Misreads must be recoverable.** One protective line read as a threat locked Vera's secret (fear stuck above
+   the limit). Comfort now lowers fear, and the threshold was relaxed. Even so, about 1 line in 7 is misread, so
+   **the UI must show how each line was read**.
+5. **The meter system needs E4B.** E2B misses enough labels that Reilly never walks out and Lou's guilt route
+   fails. On CPU-only machines E2B still works, but the case plays noticeably worse; consider easier thresholds
+   for the CPU tier.
+6. **An invalid reply must change nothing**: no history entry (the model would see broken JSON as its own words),
+   no meter changes. The player just tries again.
 
 ## Sources
 

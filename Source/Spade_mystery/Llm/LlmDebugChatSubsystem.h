@@ -1,5 +1,6 @@
-// Spike-only debug window: console command "Llm.DebugChat" opens a Slate window to chat with the test suspect.
-// No assets needed. Remove or replace with the real interrogation UI later.
+// Spike-only debug window: console command "Llm.DebugChat" opens a Slate window to interrogate every suspect
+// in the case from Project Settings > Local LLM > CaseDir. Shows meters, how each line was read, clue cards,
+// evidence buttons and accusation. No assets needed. Replace with the real interrogation UI later.
 
 #pragma once
 
@@ -13,8 +14,9 @@ class SMultiLineEditableTextBox;
 class SEditableTextBox;
 class STextBlock;
 class SWindow;
-class USuspectChatSession;
-struct FSuspectReply;
+class SWrapBox;
+class UInterrogationSession;
+struct FInterrogationReply;
 enum class ELlmServerState : uint8;
 
 UCLASS()
@@ -29,19 +31,28 @@ public:
 	void OpenWindow();
 
 private:
+	void SelectSuspect(const FString& SuspectId);
 	void OnSubmit(const FText& Text, ETextCommit::Type CommitType);
-	void OnReply(const FSuspectReply& Reply);
+	void OnPresent(const FString& EvidenceId);
+	void OnAccuse();
+	void OnReply(const FInterrogationReply& Reply);
 	void OnServerState(ELlmServerState State);
-	void Append(const FString& Line);
+	void Append(const FString& SuspectId, const FString& Line);
+	void RefreshTranscript();
 	void RefreshStatus();
+	void RebuildEvidenceButtons();
+	FString SuspectName(const FString& SuspectId) const;
 
 	UPROPERTY()
-	TObjectPtr<USuspectChatSession> Session;
+	TObjectPtr<UInterrogationSession> Session;
 
 	IConsoleObject* Command = nullptr;
-	FString Transcript;
+	FString CurrentSuspect;
+	TMap<FString, FString> Transcripts;
 	TSharedPtr<SWindow> Window;
 	TSharedPtr<SMultiLineEditableTextBox> TranscriptBox;
 	TSharedPtr<SEditableTextBox> InputBox;
 	TSharedPtr<STextBlock> StatusText;
+	TSharedPtr<STextBlock> HeaderText;
+	TSharedPtr<SWrapBox> EvidenceBox;
 };
