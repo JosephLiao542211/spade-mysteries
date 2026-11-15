@@ -22,8 +22,13 @@ struct FInterrogationReply
 	/** True if this answered an evidence presentation rather than a typed line. */
 	UPROPERTY(BlueprintReadOnly) bool bEvidenceEvent = false;
 
-	/** How the model read the detective's line: show this to the player ("Vera took that as a threat"). */
+	/** How the detective's line was read: show this to the player ("Vera took that as a threat").
+	 *  The text rules (LlmTextRules) override the model when they are confident. */
 	UPROPERTY(BlueprintReadOnly) FString PlayerTactic;
+	/** The model's own reading, set only when the text rules overrode it (diagnostics). */
+	UPROPERTY(BlueprintReadOnly) FString ModelTactic;
+	/** The first reply failed the reply guard (AI talk, echoed state note, empty) and was regenerated. */
+	UPROPERTY(BlueprintReadOnly) bool bGuardRetried = false;
 	UPROPERTY(BlueprintReadOnly) FString ClaimedEvidence;
 	UPROPERTY(BlueprintReadOnly) FString RepeatedSuspect;
 	UPROPERTY(BlueprintReadOnly) bool bBluffDetected = false;
@@ -76,10 +81,13 @@ public:
 
 private:
 	bool Send(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence);
+	/** Available secret the typed line touches (forced reveal), or empty. Same result on a retry: state is unchanged. */
+	FString ForcedSecret(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence) const;
 	void PostChat(int32 Slot, const TArray<FLlmMessage>& Messages, const TSharedRef<FJsonObject>& Schema, int32 MaxTokens,
 		TFunction<void(bool bOk, const TSharedPtr<FJsonObject>& Response, const FString& Error)> Done);
 	void HandleReply(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence,
-		const TMap<FString, FString>& Allowed, double StartTime, bool bOk, const TSharedPtr<FJsonObject>& Response, const FString& Error);
+		const TMap<FString, FString>& Allowed, double StartTime, bool bOk, const TSharedPtr<FJsonObject>& Response, const FString& Error,
+		bool bIsRetry = false);
 
 	TWeakObjectPtr<ULlmServerSubsystem> Server;
 	FLlmCase Case;

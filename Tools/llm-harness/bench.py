@@ -8,6 +8,10 @@ Usage (from the repo root):
   python -I Tools/llm-harness/bench.py                        # default configs (e4b-gpu, e2b-gpu)
   python -I Tools/llm-harness/bench.py e4b-gpu e2b-cpu4       # selected configs
   python -I Tools/llm-harness/bench.py e4b-gpu --only vera_trust
+  python -I Tools/llm-harness/bench.py qwen3-1.7b-gpu --assist  # text rules on, as in the game (see plan §15)
+  python -I Tools/llm-harness/bench.py qwen3-1.7b-gpu --assist --tag r2   # repeat run, kept separately
+
+LLAMA_SERVER=/path/to/llama-server overrides the server binary (e.g. a macOS Metal build from Homebrew).
 """
 
 import json
@@ -21,6 +25,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine  # noqa: E402
+import reply_guard  # noqa: E402
+import reveal_rules  # noqa: E402
+import tactic_rules  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 LLAMA_TAG = "b12368"
@@ -28,6 +35,7 @@ VULKAN = ROOT / "ThirdParty" / "llama" / f"{LLAMA_TAG}-vulkan" / "llama-server.e
 CPU = ROOT / "ThirdParty" / "llama" / f"{LLAMA_TAG}-cpu" / "llama-server.exe"
 E4B = ROOT / "Models" / "gemma-4-E4B-it-Q4_K_M.gguf"
 E2B = ROOT / "Models" / "gemma-4-E2B-it-Q4_K_M.gguf"
+MODELS = ROOT / "Models"
 OUT = Path(__file__).resolve().parent / "results"
 SCRIPTS = Path(__file__).resolve().parent / "scripts" / "spade_club.json"
 PORT = 39281
@@ -44,6 +52,13 @@ CONFIGS = {
     "e2b-gpu":  (VULKAN, E2B, ["-ngl", "99"]),
     "e4b-cpu4": (CPU, E4B, ["-ngl", "0", "-t", "4"]),
     "e2b-cpu4": (CPU, E2B, ["-ngl", "0", "-t", "4"]),
+    # Low-spec candidates (small downloads). Same unsloth/bartowski Q4_K_M GGUFs as the plan's convention.
+    "qwen3-0.6b-gpu":  (VULKAN, MODELS / "Qwen3-0.6B-Q4_K_M.gguf", ["-ngl", "99"]),           # 0.40 GB
+    "qwen3.5-0.8b-gpu": (VULKAN, MODELS / "Qwen3.5-0.8B-Q4_K_M.gguf", ["-ngl", "99"]),         # 0.53 GB
+    "gemma3-1b-gpu":   (VULKAN, MODELS / "gemma-3-1b-it-Q4_K_M.gguf", ["-ngl", "99"]),         # 0.81 GB
+    "llama3.2-1b-gpu": (VULKAN, MODELS / "Llama-3.2-1B-Instruct-Q4_K_M.gguf", ["-ngl", "99"]), # 0.81 GB
+    "qwen3-1.7b-gpu":  (VULKAN, MODELS / "Qwen3-1.7B-Q4_K_M.gguf", ["-ngl", "99"]),           # 1.11 GB
+    "qwen3-1.7b-cpu4": (CPU, MODELS / "Qwen3-1.7B-Q4_K_M.gguf", ["-ngl", "0", "-t", "4"]),
 }
 DEFAULT = ["e4b-gpu", "e2b-gpu"]
 
@@ -109,7 +124,7 @@ def parse(content, sch):
 
 # ---------- play ----------
 
-def play_script(case, script):
+def play_script(case, script, assist=False):
     cs = engine.CaseState(case)
     cs.inventory |= set(script.get("inventory_add", []))
     sid = script["suspect"]
@@ -126,18 +141,55 @@ def play_script(case, script):
         presented = step.get("present")
         user_msg = engine.evidence_message(case, presented) if presented else engine.detective_message(step["say"])
         allowed = dict(engine.available_secrets(cs, sid))
-        sch = engine.schema(cs, sid)
-        msgs = engine.build_messages(cs, sid, user_msg)
+        # Assist: if the line touches an available secret's topic, the model must admit it (as the game does).
+        force = (reveal_rules.touched_secret(step["say"], engine.available_secret_details(cs, sid))
+                 if assist and not presented else None)
+        sch = engine.schema(cs, sid, force)
+        msgs = engine.build_messages(cs, sid, user_msg, force)
         data, wall = chat(msgs, sch, slot)
         content = data["choices"][0]["message"].get("content") or ""
         obj, err = parse(content, sch)
+        model_t, rule_t, guard_note = obj and obj["t"], None, None
+        if assist and obj:
+            # Guard the spoken line; on a problem, retry once, then treat it as an invalid reply.
+            name = case["suspect_defs"][sid]["name"]
+            obj["r"] = reply_guard.clean(obj["r"], name)
+            problems = reply_guard.issues(obj["r"])
+            if problems:
+                data, wall2 = chat(msgs, sch, slot)
+                wall += wall2
+                content = data["choices"][0]["message"].get("content") or ""
+                obj, err = parse(content, sch)
+                if obj:
+                    obj["r"] = reply_guard.clean(obj["r"], name)
+                    again = reply_guard.issues(obj["r"])
+                    guard_note = f"retried after {problems}" + (f", still {again}" if again else "")
+                    if again:
+                        obj, err = None, f"guard: {again}"
+                else:
+                    guard_note = f"retried after {problems}, then {err}"
+                model_t = obj and obj["t"]
+            if obj and not presented:
+                rule_t = tactic_rules.classify(step["say"], case)
+                if rule_t:
+                    obj["t"] = rule_t
+                vetoed = {k: obj[k] for k, fn in (("c", tactic_rules.veto_claim), ("g", tactic_rules.veto_gossip))
+                          if fn(step["say"], obj[k], case) != obj[k]}
+                for k in vetoed:
+                    obj[k] = "none"
+                if vetoed:
+                    guard_note = (guard_note + "; " if guard_note else "") + f"vetoed {vetoed}"
+            if obj:
+                # The history keeps the corrected JSON, so the model sees consistent past turns.
+                content = json.dumps(obj, ensure_ascii=False)
         # Same as the game: an invalid reply changes nothing and never enters the history.
         ev = (engine.resolve_turn(cs, sid, user_msg, obj, content, allowed, presented=presented) if obj else
               {"deltas": {}, "revealed": None, "granted": None, "bluff": False, "gossip": None, "triggers": []})
         tm = data.get("timings", {})
         turn = {
             "say": step.get("say"), "present": presented, "expect": step.get("expect"),
-            "got_t": obj and obj["t"], "c": obj and obj["c"], "g": obj and obj["g"],
+            "got_t": obj and obj["t"], "model_t": model_t, "rule_t": rule_t, "guard": guard_note, "forced": force,
+            "c": obj and obj["c"], "g": obj and obj["g"],
             "emotion": obj and obj["e"], "reply": obj and obj["r"], "f": obj and obj["f"], "error": err,
             "raw": content if err else None,
             "finish": data["choices"][0].get("finish_reason"),
@@ -164,6 +216,7 @@ def summarize(name, script, res):
     valid = [t for t in played if not t["error"]]
     labelled = [t for t in valid if t["expect"]]
     correct = [t for t in labelled if t["got_t"] == t["expect"]]
+    model_correct = [t for t in labelled if t.get("model_t") == t["expect"]]
     exp = set(script.get("expect_reveals", []))
     got = set(res["revealed"])
     checks = [t[k] for t in played for k in ("bluff_ok", "gossip_ok") if k in t]
@@ -171,6 +224,8 @@ def summarize(name, script, res):
         "config": name, "script": script["name"],
         "valid": f"{len(valid)}/{len(played)}",
         "tactics": f"{len(correct)}/{len(labelled)}",
+        "tactics_model_only": f"{len(model_correct)}/{len(labelled)}",
+        "guard_retries": sum(1 for t in played if t.get("guard")),
         "bluff_gossip": f"{sum(checks)}/{len(checks)}" if checks else "-",
         "reveals": f"{len(exp & got)}/{len(exp)}" + (f" +{sorted(got - exp)}" if got - exp else ""),
         "closed": ("ok" if res["closed"] == script.get("expect_closed", False) else "WRONG"),
@@ -184,33 +239,36 @@ def summarize(name, script, res):
     return row
 
 
-def run_config(name, case, scripts):
+def run_config(name, case, scripts, assist=False, tag=""):
     exe, model, extra = CONFIGS[name]
+    if os.environ.get("LLAMA_SERVER"):
+        exe = Path(os.environ["LLAMA_SERVER"])
+    label = name + ("-assist" if assist else "") + (f"-{tag}" if tag else "")
     for p in (exe, model):
         if not p.exists():
             print(f"[{name}] missing {p}")
             return []
     OUT.mkdir(exist_ok=True)
-    log = open(OUT / f"{name}.server.log", "w", encoding="utf-8")
+    log = open(OUT / f"{label}.server.log", "w", encoding="utf-8")
     env = dict(os.environ, GGML_VK_VISIBLE_DEVICES="0")
     vram0 = vram_used_mib()
     args = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(PORT)] + COMMON + extra
     proc = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=exe.parent)
-    rows, full = [], {"config": name, "args": [a.replace(str(ROOT) + os.sep, "") for a in args[1:]], "scripts": {}}
+    rows, full = [], {"config": label, "args": [a.replace(str(ROOT) + os.sep, "") for a in args[1:]], "scripts": {}}
     try:
         if wait_health(proc) is None:
-            print(f"[{name}] server failed to start; see {log.name}")
+            print(f"[{label}] server failed to start; see {log.name}")
             return []
         vram = vram_used_mib()
         full["vram_mib"] = (vram - vram0) if vram is not None and vram0 is not None else None
         for script in scripts:
-            res = play_script(case, script)
+            res = play_script(case, script, assist)
             full["scripts"][script["name"]] = res
-            row = summarize(name, script, res)
+            row = summarize(label, script, res)
             rows.append(row)
-            print(f"[{name}] {script['name']}: " + "  ".join(f"{k}={v}" for k, v in row.items() if k not in ("config", "script")))
-        (OUT / f"spade-{name}.json").write_text(json.dumps(full, indent=2) + "\n", encoding="utf-8")
-        write_transcript(name, case, scripts, full)
+            print(f"[{label}] {script['name']}: " + "  ".join(f"{k}={v}" for k, v in row.items() if k not in ("config", "script")))
+        (OUT / f"spade-{label}.json").write_text(json.dumps(full, indent=2) + "\n", encoding="utf-8")
+        write_transcript(label, case, scripts, full)
         return rows
     finally:
         proc.terminate()
@@ -243,6 +301,10 @@ def write_transcript(name, case, scripts, full):
             if ev["gossip"]:
                 extra.append(f"repeats {ev['gossip']}")
             extra += [f"rule: {x}" for x in ev["triggers"]]
+            if t.get("rule_t") and t.get("model_t") != t.get("rule_t"):
+                extra.append(f"rules corrected t from {t['model_t']}")
+            if t.get("guard"):
+                extra.append(f"guard {t['guard']}")
             lines.append(f"- **Detective:** {who}\n  - **Suspect** ({t['emotion']}): {t['reply'] or t['error']}\n"
                          f"  - t={t['got_t']}{mark}, c={t['c']}, g={t['g']}, f={t['f']} | "
                          f"meters {t['meters']} | {t['wall_s']}s" + (" | " + "; ".join(extra) if extra else ""))
@@ -254,6 +316,13 @@ def write_transcript(name, case, scripts, full):
 def main():
     argv = sys.argv[1:]
     only = None
+    assist = "--assist" in argv
+    argv = [a for a in argv if a != "--assist"]
+    tag = ""
+    if "--tag" in argv:  # repeat runs: results/spade-<config>[-assist]-<tag>.json
+        i = argv.index("--tag")
+        tag = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     if "--only" in argv:
         i = argv.index("--only")
         only = set(argv[i + 1].split(","))
@@ -262,14 +331,14 @@ def main():
     case = engine.load_case(ROOT / spec["case"])
     scripts = [s for s in spec["scripts"] if not only or s["name"] in only]
     for n in argv or DEFAULT:
-        rows = run_config(n, case, scripts)
+        rows = run_config(n, case, scripts, assist, tag)
         if not rows:
             continue
         cols = list(dict.fromkeys(k for r in rows for k in r))
         table = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
         table += ["| " + " | ".join(str(r.get(c, "")) for c in cols) + " |" for r in rows]
         print("\n" + "\n".join(table))
-        (OUT / f"spade-{n}-summary.md").write_text("\n".join(table) + "\n", encoding="utf-8")
+        (OUT / f"spade-{n}{'-assist' if assist else ''}{'-' + tag if tag else ''}-summary.md").write_text("\n".join(table) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
