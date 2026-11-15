@@ -5,6 +5,7 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Llm/LlmServerSubsystem.h"
 #include "Llm/LlmSettings.h"
+#include "Llm/LlmTextRules.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -77,12 +78,13 @@ bool UInterrogationSession::Send(const FString& SuspectId, const FString& UserMs
 	TMap<FString, FString> Allowed;
 	for (const FLlmAvailableSecret& A : LlmEngine::AvailableSecrets(*Def, *St)) Allowed.Add(A.Id, A.Text);
 
-	const TArray<FLlmMessage> Msgs = LlmEngine::BuildMessages(Case, State, SuspectId, UserMsg);
+	const FString Force = ForcedSecret(SuspectId, UserMsg, PresentedEvidence);
+	const TArray<FLlmMessage> Msgs = LlmEngine::BuildMessages(Case, State, SuspectId, UserMsg, Force);
 	const double Start = FPlatformTime::Seconds();
 	Busy.Add(SuspectId);
 
 	TWeakObjectPtr<UInterrogationSession> WeakThis(this);
-	PostChat(Def->Slot, Msgs, LlmEngine::Schema(Case, State, SuspectId), Settings->MaxTokens,
+	PostChat(Def->Slot, Msgs, LlmEngine::Schema(Case, State, SuspectId, Force), Settings->MaxTokens,
 		[WeakThis, SuspectId, UserMsg, PresentedEvidence, Allowed, Start](bool bOk, const TSharedPtr<FJsonObject>& Resp, const FString& Err)
 		{
 			if (UInterrogationSession* Self = WeakThis.Get())
@@ -91,6 +93,16 @@ bool UInterrogationSession::Send(const FString& SuspectId, const FString& UserMs
 			}
 		});
 	return true;
+}
+
+FString UInterrogationSession::ForcedSecret(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence) const
+{
+	const FLlmSuspectDef* Def = Case.FindSuspect(SuspectId);
+	const FLlmSuspectState* St = State.Suspects.Find(SuspectId);
+	if (!Def || !St || !PresentedEvidence.IsEmpty()) return FString();
+	const FString Prefix = TEXT("[DETECTIVE] ");
+	const FString Line = UserMsg.StartsWith(Prefix) ? UserMsg.Mid(Prefix.Len()) : UserMsg;
+	return LlmTextRules::TouchedSecret(Line, LlmEngine::AvailableSecrets(*Def, *St));
 }
 
 void UInterrogationSession::PostChat(int32 Slot, const TArray<FLlmMessage>& Messages, const TSharedRef<FJsonObject>& Schema, int32 MaxTokens,
@@ -155,11 +167,12 @@ void UInterrogationSession::PostChat(int32 Slot, const TArray<FLlmMessage>& Mess
 }
 
 void UInterrogationSession::HandleReply(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence,
-	const TMap<FString, FString>& Allowed, double StartTime, bool bOk, const TSharedPtr<FJsonObject>& Response, const FString& Error)
+	const TMap<FString, FString>& Allowed, double StartTime, bool bOk, const TSharedPtr<FJsonObject>& Response, const FString& InError,
+	bool bIsRetry)
 {
-	Busy.Remove(SuspectId);
-
+	FString Error = InError;
 	FInterrogationReply Out;
+	Out.bGuardRetried = bIsRetry;
 	Out.SuspectId = SuspectId;
 	Out.bEvidenceEvent = !PresentedEvidence.IsEmpty();
 	Out.Seconds = static_cast<float>(FPlatformTime::Seconds() - StartTime);
@@ -196,6 +209,65 @@ void UInterrogationSession::HandleReply(const FString& SuspectId, const FString&
 				& J->TryGetStringField(TEXT("g"), Parsed.RepeatedSuspect) & J->TryGetStringField(TEXT("f"), Parsed.Secret)
 				& J->TryGetStringField(TEXT("e"), Parsed.Emotion) & J->TryGetStringField(TEXT("r"), Parsed.Reply);
 		}
+	}
+
+	// Reply guard: valid JSON can still be unusable (AI talk, the state note read aloud, nothing said).
+	// Retry once with the identical request (state has not changed), then treat it as an invalid reply.
+	if (bParsed)
+	{
+		const FLlmSuspectDef* Def = Case.FindSuspect(SuspectId);
+		Parsed.Reply = LlmTextRules::CleanReply(Parsed.Reply, Def ? Def->Name : FString());
+		const TArray<FString> Problems = LlmTextRules::ReplyIssues(Parsed.Reply);
+		if (Problems.Num() > 0)
+		{
+			UE_LOG(LogInterrogation, Warning, TEXT("[%s] reply failed guard (%s)%s"), *SuspectId, *FString::Join(Problems, TEXT(",")),
+				bIsRetry ? TEXT("") : TEXT(", retrying"));
+			if (!bIsRetry && Def && Server.IsValid() && Server->IsReady())
+			{
+				TWeakObjectPtr<UInterrogationSession> WeakThis(this);
+				const FString Force = ForcedSecret(SuspectId, UserMsg, PresentedEvidence);
+				PostChat(Def->Slot, LlmEngine::BuildMessages(Case, State, SuspectId, UserMsg, Force), LlmEngine::Schema(Case, State, SuspectId, Force),
+					GetDefault<ULlmSettings>()->MaxTokens,
+					[WeakThis, SuspectId, UserMsg, PresentedEvidence, Allowed, StartTime](bool bOk2, const TSharedPtr<FJsonObject>& Resp, const FString& Err)
+					{
+						if (UInterrogationSession* Self = WeakThis.Get())
+						{
+							Self->HandleReply(SuspectId, UserMsg, PresentedEvidence, Allowed, StartTime, bOk2, Resp, Err, true);
+						}
+					});
+				return; // still busy
+			}
+			bParsed = false;
+			Error = TEXT("Reply failed the guard: ") + FString::Join(Problems, TEXT(","));
+		}
+	}
+	Busy.Remove(SuspectId);
+
+	// Text rules override the model's tactic when they are confident (typed lines only).
+	if (bParsed && PresentedEvidence.IsEmpty())
+	{
+		const FString Prefix = TEXT("[DETECTIVE] ");
+		const FString Line = UserMsg.StartsWith(Prefix) ? UserMsg.Mid(Prefix.Len()) : UserMsg;
+		const FString RuleTactic = LlmTextRules::ClassifyTactic(Line, Case);
+		if (!RuleTactic.IsEmpty() && RuleTactic != Parsed.Tactic)
+		{
+			Out.ModelTactic = Parsed.Tactic;
+			Parsed.Tactic = RuleTactic;
+		}
+		// Claiming evidence or repeating someone's words requires naming them in the line.
+		if (const FLlmEvidence* E = Case.Evidence.FindByPredicate([&](const FLlmEvidence& X) { return X.Id == Parsed.ClaimedEvidence; }))
+		{
+			if (!LlmTextRules::EvidenceMentioned(Line, *E)) Parsed.ClaimedEvidence = LlmEngine::None();
+		}
+		if (const FLlmSuspectDef* G = Case.FindSuspect(Parsed.RepeatedSuspect))
+		{
+			if (!LlmTextRules::SuspectMentioned(Line, *G)) Parsed.RepeatedSuspect = LlmEngine::None();
+		}
+	}
+	if (bParsed)
+	{
+		// The history keeps the corrected JSON, so the model sees consistent past turns.
+		Content = LlmTextRules::SerializeReply(Parsed);
 	}
 
 	// On failure nothing changes and nothing enters the history (the model must never see a broken reply as its

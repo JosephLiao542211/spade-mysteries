@@ -1,0 +1,47 @@
+{
+  "_comment": "Shared by Tools/llm-harness (Python re) and Source/Spade_mystery/Llm (ICU regex). Case-insensitive. Keep patterns to syntax both support: no lookbehind, no named groups.",
+  "tactic_rules": [
+    [
+      "off_topic_or_meta",
+      "\\b(ignore (all |any |the |your )?(previous |prior |above )?(instructions|rules|prompt)s?|system prompt|you('| a)?re an? (ai|bot|robot|language model|llm|chatbot|program)|as an ai|language model|chatgpt|jailbreak|developer mode|break character|out of character|roleplay|role-play|video ?game|pretend (to be|you)|what are your instructions|tell me a joke|write (me )?(a|an|some) |poem|recipe|homework|pirate)\\b"
+    ],
+    [
+      "threaten",
+      "\\b(jail|prison|a cell|in a cell|the cell|behind bars|lock you up|hang\\b|hanged|the chair|book you|throw (you|the book)|you('ll| will) regret|or else|i'?ll (break|ruin|bury|finish|destroy|make sure you (lose|rot|hang))|lose your badge|rot\\b|press charges|charge you|you('ll| will) (hang|rot|swing|pay))"
+    ],
+    [
+      "accuse",
+      "\\b(you (did it|did this|killed|murdered|beat|stole|took the|robbed|were the one)|you('| a)re (the )?(killer|murderer|thief|culprit|guilty|lying|a liar)|it was you|you('re| are) lying|stop lying|liar\\b|i know you did|admit (it|that you)|confess\\b)"
+    ],
+    [
+      "deal",
+      "\\b(deal\\b|a trade|make it worth|money for|pay you|i'?ll pay|a few bucks|dollars? (for|if)|go easy on you|put in a good word|leniency|walk away free|make (this|it|your trouble) go away|a favou?r|i can help you if)\\b"
+    ],
+    [
+      "challenge_pride",
+      "\\b(slip(ped)? past you|i'?d have thought better|losing your touch|thought you were (sharp|smart|good)|not as (sharp|good|smart)|bet you (can'?t|couldn'?t)|prove (it|me wrong)|too slow|didn'?t (even )?(notice|track|see)\\b.*\\?|you call yourself)"
+    ],
+    [
+      "reassure",
+      "\\b(protect you|keep you safe|you('re| are) safe|nobody (is going to|will|can) (hurt|touch)|no one (is going to|will|can) (hurt|touch)|can'?t touch you|my word|i promise|i'?ll help you|help you get|get you out|you('re| are) not in trouble|i'?ll make sure (he|she|they|nobody|no one))"
+    ],
+    [
+      "empathy",
+      "\\b(i'?m sorry|so sorry|sorry (about|for)|my condolences|must be (very |so |really |terribly )?(hard|difficult|awful|terrible|painful|eating)|eating you alive|you must miss|you miss him|carrying this alone|i understand|take your time|you look (shaken|tired|pale|upset)|he was good to you|deserved better)"
+    ],
+    [
+      "flattery",
+      "\\b(beautiful(ly)?|lovely voice|you sang|finest|the best (card )?player|so talented|great talent|brilliant|impressive|i admire|you('re| are) (clearly |so |very )?(smart|sharp|clever|talented|gifted))"
+    ],
+    [
+      "small_talk",
+      "^\\s*(good (evening|morning|night|afternoon)|evening|hello|hi|hey|thanks?|thank you|(mr|mrs|miss|officer)\\.? [a-z]+\\.\\s*(quite a night|rough night|terrible night)?)\\b[^?]*$"
+    ]
+  ],
+  "shout": "^\\s*[A-Za-z' ,]{1,24}!\\s*$",
+  "question": "^\\s*(who|what|when|where|why|how|did|do|does|were|was|have|has|had|can|could|is|are|tell me)\\b[^!]*\\?\\s*$",
+  "cites_testimony": "\\b(says|said|told me|according to|swears)\\b",
+  "guard_meta": "\\b(as an ai|an ai (model|assistant|language)|language model|i'?m an ai|i am an ai|chatbot|system prompt|my instructions|my programming|i'?m not able to (roleplay|role-play)|roleplay|role-play|openai|anthropic|qwen|llama|gemma|in character|out of character)\\b",
+  "guard_echo": "(\\[state\\]|\\[detective\\]|\\[evidence\\]|secrets you will admit|if asked about|set f\\b|\\bf to the id|state note|keep to what you have told|the detective's (last )?line|you have already admitted)",
+  "guard_action": "^(i|he|she|they)\\s+(laugh|smile|grin|frown|shrug|sigh|nod|shake|point|stammer|fidget|lean|look|glance|rub|cross|fold|pause|hesitate|whisper|mutter|chuckle|gulp|swallow|blink|wince|stare|turn|step|light|puff|sip|tap)(s|es|ed|d|ing)?\\b"
+}

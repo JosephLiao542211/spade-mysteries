@@ -145,7 +145,9 @@ def static_system(case, sid):
             "otherwise none; if f is not none, r must say that secret. e = your emotion. r = your spoken reply.")
 
 
-def state_note(cs, sid):
+def state_note(cs, sid, force_secret=None):
+    """force_secret: an available secret whose topic the detective's line touches (reveal_rules.touched_secret).
+    The suspect admits it this turn; schema() narrows f to it."""
     case, st, d = cs.case, cs.suspects[sid], cs.sdef(sid)
     lines = ["[STATE]"]
     for m, v in st.meters.items():
@@ -159,10 +161,15 @@ def state_note(cs, sid):
     for r in while_rules(cs, sid):
         lines.append(r["note"])
     avail = available_secret_details(cs, sid)
+    if force_secret:
+        # Only the forced secret: with several listed, small models said the wrong one.
+        avail = [a for a in avail if a[0] == force_secret]
     if avail:
         lines.append("SECRETS YOU WILL ADMIT: you have decided to give these up. If the detective's line touches "
                      "the topic, set f to the id and say it in r, in your own words, keeping the facts exact:")
         lines += [f"({i}) If asked about {topic}: {t}" for i, t, topic in avail]
+        if force_secret:
+            lines.append(f"The detective's line touches ({force_secret}). Admit it now: set f to {force_secret} and say it in r.")
     else:
         lines.append("SECRETS YOU WILL ADMIT: none. Keep to what you have told the police.")
     if st.revealed:
@@ -170,7 +177,7 @@ def state_note(cs, sid):
     return "\n".join(lines)
 
 
-def schema(cs, sid):
+def schema(cs, sid, force_secret=None):
     case = cs.case
     others = [oid for oid in case["suspect_defs"] if oid != sid]
     return {
@@ -181,7 +188,7 @@ def schema(cs, sid):
             "t": {"enum": list(case["tactics"])},
             "c": {"enum": [e["id"] for e in case["evidence"]] + [NONE]},
             "g": {"enum": others + [NONE]},
-            "f": {"enum": [NONE] + [i for i, _ in available_secrets(cs, sid)]},
+            "f": {"enum": [force_secret] if force_secret else [NONE] + [i for i, _ in available_secrets(cs, sid)]},
             "e": {"enum": case["emotions"]},
             "r": {"type": "string", "maxLength": 300},
         },
@@ -197,13 +204,13 @@ def evidence_message(case, eid):
     return f"[EVIDENCE] The detective places this on the table: {case['evidence_by_id'][eid]['description']}."
 
 
-def build_messages(cs, sid, last_user):
+def build_messages(cs, sid, last_user, force_secret=None):
     st = cs.suspects[sid]
     msgs = [{"role": "system", "content": static_system(cs.case, sid)}]
     for user, assistant in st.history:
         msgs.append({"role": "user", "content": user})
         msgs.append({"role": "assistant", "content": assistant})
-    msgs.append({"role": "user", "content": state_note(cs, sid) + "\n\n" + last_user})
+    msgs.append({"role": "user", "content": state_note(cs, sid, force_secret) + "\n\n" + last_user})
     return msgs
 
 

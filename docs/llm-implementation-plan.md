@@ -2,7 +2,7 @@
 
 How the suspects' dialogue will run on a local model inside Spade Mystery (UE 5.8).
 Status: Day-1 spike done for the model side (§13). Trust/fear meter system and the Spade Club case built and
-benchmarked (§14, case file in `docs/cases/spade-club.md`). Unreal code written but not yet compiled.
+benchmarked (§14, case file in `docs/cases/spade-club.md`). Text rules and a 1.1 GB low-spec tier benchmarked (§15). Unreal code written but not yet compiled.
 Researched 2026-11-13.
 
 ## 1. Where the repo stands
@@ -266,13 +266,22 @@ Source/Spade_mystery/Llm/
   LlmEngine.{h,cpp}                    meters, secret keys, rules, prompt, schema, turn resolution, accusation
   InterrogationSession.{h,cpp}         one playthrough: state, inventory, HTTP, OnReply delegate
   LlmDebugChatSubsystem.{h,cpp}        "Llm.DebugChat" Slate window (spike only)
+  LlmTextRules.{h,cpp}                 tactic rules, reply guard, topic-forced reveals (§15)
 Content/Llm/Cases/SpadeClub/           case.json + one JSON per suspect
+Content/Llm/text_rules.json            regex patterns shared by LlmTextRules.cpp and the Python harness
 Tools/
   fetch-models.ps1                     pinned downloads + SHA-256
   llm-harness/engine.py                Python copy of LlmEngine (keep in sync)
   llm-harness/test_engine.py           model-free rule tests
   llm-harness/bench.py                 scripted interrogations against llama-server
   llm-harness/scripts/spade_club.json  the scripts, with expected tactic labels and reveals
+  llm-harness/tactic_rules.py          rule-based tactic reading (§15)
+  llm-harness/reply_guard.py           cleans / rejects the spoken reply (§15)
+  llm-harness/reveal_rules.py          "does this line touch an unlocked secret's topic?" (§15)
+  llm-harness/validate_case.py         broken references + "can this case be won?" (§15)
+  llm-harness/test_tools.py            model-free tests for the four above
+  llm-harness/score_tactic_rules.py    tactic-rule accuracy on the labelled script lines
+  llm-harness/summarize_results.py     one table across all results/spade-*.json
 ```
 
 `engine.py` and `LlmEngine.cpp` implement the same rules and build the same prompt text. Writers and
@@ -391,6 +400,65 @@ reply ~78 tokens.
    for the CPU tier.
 6. **An invalid reply must change nothing**: no history entry (the model would see broken JSON as its own words),
    no meter changes. The player just tries again.
+
+## 15. Text rules and a small-download tier (2026-11-15)
+
+**Problem.** Small models break the meter system in predictable ways: they misread the detective's tactic (E2B 70%,
+Qwen3 0.6B 40%, Llama 3.2 1B 11%), almost never decide to admit a secret (`f`), fill `c` with random evidence (each
+one counts as a bluff and frightens the suspect), and sometimes narrate or read the state note aloud. Download size
+matters too: E2B is 3.11 GB, E4B 4.98 GB.
+
+**What was added** (Python in `Tools/llm-harness/`, C++ in `LlmTextRules.{h,cpp}` + `InterrogationSession.cpp`):
+
+| Piece | What it does | Never does |
+|---|---|---|
+| Tactic rules (`tactic_rules.py`, patterns in `Content/Llm/text_rules.json`) | Reads `t` with regexes when the line is unambiguous (threat, apology, jailbreak, plain question); otherwise passes and the model's `t` stands | Guess on unclear lines (abstains on ~20%) |
+| Forced reveal (`reveal_rules.py`) | If the line **asks** something (`?`, "tell me", "explain") and touches an unlocked secret's `topic` (topic words, plus anything quoted like `'R.'` matched exactly), `f`'s enum becomes just that secret and the state note lists only it | Unlock anything: only secrets the meters already made available |
+| `c`/`g` vetoes | Claiming an item or quoting someone requires the line to name it, otherwise `none` | Add a label: only removes one |
+| Reply guard (`reply_guard.py`) | Strips `*actions*`, `[directions]`, name labels, narration ("Vera smiles."); rejects AI talk, state-note echoes, empty replies; one retry, then invalid (no state change) | Touch meters or secrets |
+| Case validator (`validate_case.py`) | Unknown ids/meters/tactics, duplicate slots, secrets that can never unlock, a case that can't be won | Run in the game (writers' tool) |
+
+All of it is on in the C++ for every tier. In the harness it's `bench.py <config> --assist`.
+
+**Results** (Spade Club scripts, 46 labelled lines, 8 expected reveals; Mac M2 Metal for the small models, the RTX 3090
+runs from §14 for Gemma 4; `python -I Tools/llm-harness/summarize_results.py`):
+
+| Config | Download | Tactics right | Reveals | Case won |
+|---|---|---|---|---|
+| Gemma 4 E4B (§14) | 4.98 GB | 85% | 7/8 | yes |
+| Gemma 4 E2B (§14) | 3.11 GB | 70% | 5/8 | yes |
+| **Qwen3 1.7B + text rules** (3 runs) | **1.11 GB** | **80–83%** | **8/8, 8/8, 8/8** | **3/3** |
+| Qwen3.5 0.8B + text rules (3 runs) | 0.53 GB | 83–89% | 7/8 ×3 | 0/3 |
+| Qwen3 0.6B + text rules (3 runs) | 0.40 GB | 80–87% | 6/8 ×3 | 0/3 |
+| Llama 3.2 1B + text rules | 0.81 GB | 80% | 7/8 | no |
+| Gemma 3 1B + text rules | 0.81 GB | 78% | 6/8 | no |
+| Same small models, no text rules | 0.4–1.1 GB | 11–40% | 0–5/8 | mostly no |
+
+"Case won" here means the Reilly script ends in a confession (`safe_open`).
+
+**Reading the transcripts, not just the table:** Qwen3 1.7B stays in character well enough for the jam ("He was a
+friend, Detective... it's eating me alive."), with lapses (Reilly once accused the detective; it repeats a pet line).
+Qwen3 0.6B scores similarly on paper but its lines are clearly worse ("I have to talk, Mr. Barrett.", "I will stand
+against the truth!"). The clue card (§4) still shows the canonical secret text when the spoken line garbles it.
+
+**Honest caveats**
+1. The tactic patterns were written after reading these 46 lines, so the "tactics right" numbers with text rules are
+   optimistic. On 12 lines from the Day-1 spike that weren't used while writing them, the rules answered 9 and matched
+   E4B's label on 8. **Needed: a fresh script written by someone else** before trusting the exact percentage.
+2. The forced-reveal rule was fixed twice after watching it fail on these scripts (quoted `'R.'`; statements must not
+   force). Model-free, with perfect tactic labels, it produces 8/8 expected reveals and no unexpected ones.
+3. Single runs at temperature 0.8 are noisy; the three repeats above agree with each other.
+4. **E4B + text rules is untested** (no 3090 here). Run `bench.py e4b-gpu --assist` to confirm it doesn't hurt E4B.
+5. **The C++ has not been compiled** (no Unreal on the Mac it was written on, same as the rest of `Llm/`).
+
+**Recommendation:** keep E4B for the High tier; make **Qwen3 1.7B Q4_K_M (Apache-2.0, 1.11 GB)** the CPU /
+integrated tier instead of E2B (3.11 GB), with the text rules on everywhere. Qwen3 needs no `--reasoning` changes:
+`--reasoning off` + `enable_thinking: false` already apply.
+
+**CPU speed is still open.** Qwen3 1.7B CPU-only on an Apple M2 (`-ngl 0 -t 4`, text rules on): 7.6 s median per
+reply, 15 tok/s, 7/8 reveals in that run. That misses the 5 s target in §12, and it isn't comparable with E2B's 4.1 s
+in §14 (Ryzen 9 7950X). **Next:** run `bench.py qwen3-1.7b-cpu4 --assist` on the 7950X and on a real laptop; if it's
+still slow, try Qwen3 0.6B (0.40 GB, roughly 2× faster, weaker lines) for the CPU tier only.
 
 ## Sources
 

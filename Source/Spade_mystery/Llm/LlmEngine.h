@@ -65,13 +65,16 @@ namespace LlmEngine
 
 	/** Stable prefix: cached once per suspect slot. */
 	FString StaticSystem(const FLlmCase& Case, const FString& Sid);
-	/** Changing part: goes in the last user message, after the history. */
-	FString StateNote(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid);
-	TSharedRef<FJsonObject> Schema(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid);
+	/** Changing part: goes in the last user message, after the history.
+	 *  ForceSecret: an available secret whose topic the line touches (LlmTextRules::TouchedSecret); admitted this turn. */
+	FString StateNote(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& ForceSecret = FString());
+	/** ForceSecret non-empty: f's enum is just that secret, so the model has to admit it. */
+	TSharedRef<FJsonObject> Schema(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& ForceSecret = FString());
 
 	FString DetectiveMessage(const FString& Line);
 	FString EvidenceMessage(const FLlmCase& Case, const FString& EvidenceId);
-	TArray<FLlmMessage> BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser);
+	TArray<FLlmMessage> BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser,
+		const FString& ForceSecret = FString());
 
 	/** Apply one exchange. Parsed = nullptr if the reply was invalid. PresentedEvidence non-empty for an evidence event.
 	 *  Allowed = secrets available when the request was sent (id -> text). */

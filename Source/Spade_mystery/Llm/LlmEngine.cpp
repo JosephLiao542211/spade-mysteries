@@ -134,7 +134,7 @@ FString LlmEngine::StaticSystem(const FLlmCase& Case, const FString& Sid)
 		+ TEXT("otherwise none; if f is not none, r must say that secret. e = your emotion. r = your spoken reply.");
 }
 
-FString LlmEngine::StateNote(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid)
+FString LlmEngine::StateNote(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& ForceSecret)
 {
 	const FLlmSuspectDef* Def = Case.FindSuspect(Sid);
 	const FLlmSuspectState* St = State.Suspects.Find(Sid);
@@ -153,11 +153,20 @@ FString LlmEngine::StateNote(const FLlmCase& Case, const FLlmCaseState& State, c
 	if (St->ShutdownLeft > 0) Lines.Add(St->ShutdownNote);
 	for (const FLlmRule* R : WhileRules(*Def, *St)) Lines.Add(R->Note);
 
-	const TArray<FLlmAvailableSecret> Avail = AvailableSecrets(*Def, *St);
+	TArray<FLlmAvailableSecret> Avail = AvailableSecrets(*Def, *St);
+	if (!ForceSecret.IsEmpty())
+	{
+		// Only the forced secret: with several listed, small models said the wrong one.
+		Avail.RemoveAll([&](const FLlmAvailableSecret& A) { return A.Id != ForceSecret; });
+	}
 	if (Avail.Num() > 0)
 	{
 		Lines.Add(TEXT("SECRETS YOU WILL ADMIT: you have decided to give these up. If the detective's line touches the topic, set f to the id and say it in r, in your own words, keeping the facts exact:"));
 		for (const FLlmAvailableSecret& A : Avail) Lines.Add(FString::Printf(TEXT("(%s) If asked about %s: %s"), *A.Id, *A.Topic, *A.Text));
+		if (!ForceSecret.IsEmpty())
+		{
+			Lines.Add(FString::Printf(TEXT("The detective's line touches (%s). Admit it now: set f to %s and say it in r."), *ForceSecret, *ForceSecret));
+		}
 	}
 	else
 	{
@@ -172,7 +181,7 @@ FString LlmEngine::StateNote(const FLlmCase& Case, const FLlmCaseState& State, c
 	return Join(Lines, TEXT("\n"));
 }
 
-TSharedRef<FJsonObject> LlmEngine::Schema(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid)
+TSharedRef<FJsonObject> LlmEngine::Schema(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& ForceSecret)
 {
 	TArray<FString> Tactics, Evidence, Others, Secrets = { None() };
 	for (const auto& T : Case.Tactics) Tactics.Add(T.Key);
@@ -189,6 +198,7 @@ TSharedRef<FJsonObject> LlmEngine::Schema(const FLlmCase& Case, const FLlmCaseSt
 	{
 		for (const FLlmAvailableSecret& A : AvailableSecrets(*Def, *St)) Secrets.Add(A.Id);
 	}
+	if (!ForceSecret.IsEmpty()) Secrets = { ForceSecret };
 
 	TSharedRef<FJsonObject> Reply = MakeShared<FJsonObject>();
 	Reply->SetStringField(TEXT("type"), TEXT("string"));
@@ -225,7 +235,8 @@ FString LlmEngine::EvidenceMessage(const FLlmCase& Case, const FString& Evidence
 	return FString::Printf(TEXT("[EVIDENCE] The detective places this on the table: %s."), E ? *E->Description : *EvidenceId);
 }
 
-TArray<FLlmMessage> LlmEngine::BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser)
+TArray<FLlmMessage> LlmEngine::BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser,
+	const FString& ForceSecret)
 {
 	TArray<FLlmMessage> Msgs;
 	Msgs.Add({ TEXT("system"), StaticSystem(Case, Sid) });
@@ -237,7 +248,7 @@ TArray<FLlmMessage> LlmEngine::BuildMessages(const FLlmCase& Case, const FLlmCas
 			Msgs.Add({ TEXT("assistant"), Turn.Value });
 		}
 	}
-	Msgs.Add({ TEXT("user"), StateNote(Case, State, Sid) + TEXT("\n\n") + LastUser });
+	Msgs.Add({ TEXT("user"), StateNote(Case, State, Sid, ForceSecret) + TEXT("\n\n") + LastUser });
 	return Msgs;
 }
 
