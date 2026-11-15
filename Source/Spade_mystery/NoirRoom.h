@@ -14,6 +14,8 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class USkeletalMeshComponent;
 class UTextureRenderTarget2D;
+class UMediaPlayer;
+class UMediaTexture;
 
 /**
  * The interrogation room, built entirely from engine primitive shapes at runtime.
@@ -58,9 +60,6 @@ private:
 
 	UPROPERTY() TObjectPtr<USceneComponent> TableRoot;
 	UPROPERTY() TObjectPtr<USceneComponent> ChairRoot;
-	UPROPERTY() TObjectPtr<USceneComponent> MicRoot;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> MicPole;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> MicHead;
 	UPROPERTY() TObjectPtr<USceneComponent> LampPivot;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> LampCord;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> LampShade;
@@ -76,6 +75,8 @@ private:
 	UPROPERTY() TArray<TObjectPtr<USceneComponent>> SuspectRoots;
 
 	void ApplySettings(float Time);
+	void SyncVideoSuspects();
+	bool HasVideo(int32 Index) const;
 	void SyncSuspectCharacters();
 	void RefreshVisibility();
 	void UpdateHolder(int32 Index, AActor* Real, USkeletalMeshComponent* Body, const struct FNoirSeatedPose& Pose);
@@ -92,4 +93,16 @@ private:
 	TArray<int32> SettleFrames;    // frames left to auto-centre after spawn / clip change
 	TArray<float> HeadHeights;     // head bone height per suspect (room space)
 	float SmoothedHead = 0.f;
+
+	/** Video suspects: a panel per suspect playing a looping clip. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> VideoPanels;
+	/** Hands-only cards (same video, hands matte), projected from the camera onto a plane in front of the desk. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> HandsPanels;
+	/** Invisible boxes that only cast the suspect's shadow onto the desk. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> ShadowCasters;
+	UPROPERTY() TArray<TObjectPtr<UMediaPlayer>> VideoPlayers;
+	UPROPERTY() TArray<TObjectPtr<UMediaTexture>> VideoTextures;
+	UPROPERTY() TObjectPtr<UStaticMesh> PlaneMesh;
+	UPROPERTY() TObjectPtr<UMaterialInterface> VideoMaterial;
+	TArray<FString> VideoPaths;
 };

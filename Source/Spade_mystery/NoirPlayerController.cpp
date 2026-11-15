@@ -1,6 +1,7 @@
 #include "NoirPlayerController.h"
 #include "NoirRoom.h"
 #include "NoirHUD.h"
+#include "NoirLookSettings.h"
 #include "Components/InputComponent.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -19,13 +20,13 @@ ANoirPlayerController::ANoirPlayerController()
 		S.Answers = {
 			TEXT("On stage, from half past ten till midnight. A hundred people were looking right at me, detective. Ask any of them."),
 			TEXT("Ace owned my contract. He liked to think that meant he owned me. It didn't."),
-			TEXT("The lights died at eleven. The band kept playing in the dark. When they came back on, Mickey wasn't behind the bar.")
+			TEXT("The lights died at eleven. The band kept playing in the dark. When they came back on, Tim wasn't at his post.")
 		};
 	}
 	{
 		FNoirSuspect& S = Suspects.AddDefaulted_GetRef();
-		S.Name = TEXT("Mickey Doyle");
-		S.Role = TEXT("Bartender, twelve years at the club");
+		S.Name = TEXT("Tim Telleson");
+		S.Role = TEXT("Bellboy, the Black Spade Club");
 		S.Greeting = TEXT("Get you something, detective? On the house. Tonight everything's on the house.");
 		S.Answers = {
 			TEXT("Behind the bar, pal. All night. Never left it once. Somebody's gotta pour the drinks."),
@@ -44,7 +45,40 @@ ANoirPlayerController::ANoirPlayerController()
 			TEXT("When the lights went out I heard someone on the back stairs, the ones up to the office. Only staff carry a key to that door.")
 		};
 	}
-	Culprit = 1; // Mickey: says he never left the bar, but Vera saw the empty bar and Graves heard a staff member on the back stairs.
+	{
+		FNoirSuspect& S = Suspects.AddDefaulted_GetRef();
+		S.Name = TEXT("Tommy Mullen");
+		S.Role = TEXT("Ace's driver and mechanic");
+		S.Greeting = TEXT("Detective! Pull up a chair. Rotten night, sure, but you look like a fella who could use a smile.");
+		S.Answers = {
+			TEXT("Out in the alley, polishing Ace's Packard and sweet-talking the hat-check girl. Ask her. She's probably still blushing."),
+			TEXT("My boss. Only guy in this town who'd trust me with a car worth more than I am. Paid me in cash and bad advice. I liked him fine."),
+			TEXT("When the lights died, the back stairwell door banged open. Somebody came down fast in a white apron. Bar staff. Never saw the face, but he smelled like rye.")
+		};
+	}
+	{
+		FNoirSuspect& S = Suspects.AddDefaulted_GetRef();
+		S.Name = TEXT("Allison Wu");
+		S.Role = TEXT("Singer, the Black Spade Club");
+		S.Greeting = TEXT("Detective. Sit, if you like. I don't bite, whatever they told you downstairs.");
+		S.Answers = {
+			TEXT("In my dressing room, waiting to go on after Vera. The lights went out and I sat in the dark with my pearls and my nerves."),
+			TEXT("Ace signed my checks and liked to remind me of it. Some girls smile through that. I'm one of them."),
+			TEXT("Someone ran past my door when the lights died. Quick footsteps, heading for the back stairs. I thought it was a stagehand.")
+		};
+	}
+	{
+		FNoirSuspect& S = Suspects.AddDefaulted_GetRef();
+		S.Name = TEXT("Logan Wu");
+		S.Role = TEXT("Businessman, Allison's husband");
+		S.Greeting = TEXT("Detective. Forgive the handkerchief. This room is warm, and the evening has been... long.");
+		S.Answers = {
+			TEXT("At our table near the stage, waiting for my wife to sing. When the lights failed I stayed exactly where I was. A man of my age learns not to stumble about in the dark."),
+			TEXT("Ace and I had business. Imports, a loan, a handshake. He paid his debts slowly, but he paid them."),
+			TEXT("Only that my wife was not in her dressing room when I went to find her. I'm sure there is a simple explanation.")
+		};
+	}
+	Culprit = 1; // Tim (story to be rewritten): says he never left the bar, but Vera saw the empty bar and Graves heard a staff member on the back stairs.
 }
 
 const TArray<FString>& ANoirPlayerController::GetQuestions()
@@ -68,7 +102,7 @@ FString ANoirPlayerController::GetEnding() const
 {
 	if (State == ENoirState::Solved)
 	{
-		return TEXT("Mickey stops polishing a glass that isn't there. \"Twelve years. And he was gonna throw me out like the trash.\" "
+		return TEXT("Tim stops polishing a glass that isn't there. \"Twelve years. And he was gonna throw me out like the trash.\" "
 			"When the lights died, he left the bar, took the back stairs with his staff key, and was pouring again before anyone missed him. "
 			"Case closed.");
 	}
@@ -125,6 +159,7 @@ void ANoirPlayerController::SetupInputComponent()
 	Bind(EKeys::Y, ENoirAction::Yes);
 	Bind(EKeys::N, ENoirAction::No);
 	Bind(EKeys::R, ENoirAction::Restart);
+	Bind(EKeys::M, ENoirAction::Mood);
 
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ThisClass::OnClick);
 }
@@ -161,6 +196,15 @@ void ANoirPlayerController::DoAction(ENoirAction Action)
 	case ENoirAction::Ask1:   Ask(0); break;
 	case ENoirAction::Ask2:   Ask(1); break;
 	case ENoirAction::Ask3:   Ask(2); break;
+	case ENoirAction::Mood:
+		if (State == ENoirState::Interrogate)
+		{
+			if (FNoirSuspectSlot* Slot = GetMutableDefault<UNoirLookSettings>()->GetMutableSuspectSlot(Current))
+			{
+				Slot->ActiveMood = (Slot->ActiveMood + 1) % (Slot->MoodVideos.Num() + 1);
+			}
+		}
+		break;
 	case ENoirAction::Accuse:
 		if (State == ENoirState::Interrogate)
 		{

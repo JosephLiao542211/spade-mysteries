@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "Misc/Paths.h"
 #include "NoirLookSettings.generated.h"
 
 class UAnimationAsset;
@@ -117,6 +118,85 @@ struct FNoirSuspectSlot
 {
 	GENERATED_BODY()
 
+	/** Looping video of the suspect (e.g. an AI-animated portrait), relative to the project folder. Set = played on a panel in the chair; overrides Character. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (FilePathFilter = "Video files (*.mp4;*.mov)|*.mp4;*.mov", RelativeToGameDir))
+	FFilePath Video;
+
+	/** Extra mood clips (e.g. relaxed, angry, sad). The in-game MOOD [M] button cycles: Video, then these in order. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (FilePathFilter = "Video files (*.mp4;*.mov)|*.mp4;*.mov", RelativeToGameDir))
+	TArray<FFilePath> MoodVideos;
+
+	/** Which clip plays: 0 = Video, 1+ = Mood Videos. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (ClampMin = "0", UIMin = "0", UIMax = "3"))
+	int32 ActiveMood = 0;
+
+	/** The clip path currently selected by Active Mood (falls back to Video). */
+	const FString& ActiveVideoPath() const
+	{
+		return (ActiveMood > 0 && MoodVideos.IsValidIndex(ActiveMood - 1) && !MoodVideos[ActiveMood - 1].FilePath.IsEmpty())
+			? MoodVideos[ActiveMood - 1].FilePath : Video.FilePath;
+	}
+
+	/** Short label for the active clip, from its file name: "Vera_angry.mp4" -> "ANGRY". */
+	FString ActiveMoodLabel() const
+	{
+		FString Name = FPaths::GetBaseFilename(ActiveVideoPath());
+		FString Left, Right;
+		return (Name.Split(TEXT("_"), &Left, &Right, ESearchCase::IgnoreCase, ESearchDir::FromEnd) ? Right : Name).ToUpper();
+	}
+
+	/** Height of the video panel in cm (width follows 16:9). The panel's bottom sits on the floor. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (ClampMin = "50", ClampMax = "500", UIMin = "100", UIMax = "350", Units = "cm"))
+	float VideoHeight = 190.f;
+
+	/** Brightness of the video panel (it is unlit, so it must compete with the lamp in the auto exposure). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (ClampMin = "0", ClampMax = "500", UIMin = "0.5", UIMax = "100"))
+	float VideoBrightness = 40.f;
+
+	/** How strongly the room's lamp lights the cut-out video (0 = only its own brightness). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (ClampMin = "0", ClampMax = "20", UIMin = "0", UIMax = "5"))
+	float VideoLit = 1.f;
+
+	/** Rotate the video image on its panel, in degrees (fix sideways/upside-down clips live). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (UIMin = "-180", UIMax = "180", Units = "deg"))
+	float VideoSpin = 0.f;
+
+	/** Mirror the video left-right. */
+	UPROPERTY(EditAnywhere, Category = "Suspect")
+	bool bVideoMirror = false;
+
+	/** The cut-out casts the lamp's shadow. Off by default: a card set into the desk shadows the desk behind it with a hard line. */
+	UPROPERTY(EditAnywhere, Category = "Suspect")
+	bool bVideoShadow = false;
+
+	/** The clip has a third row (a traced hands matte): draw the hands on their own card in front of the desk, so they rest on top of it. */
+	UPROPERTY(EditAnywhere, Category = "Suspect")
+	bool bHandsLayer = false;
+
+	/** Glow of the hands card (it sits in front of the lamp, so it needs its own brightness to match the body). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (EditCondition = "bHandsLayer", ClampMin = "0", ClampMax = "500", UIMin = "0", UIMax = "100"))
+	float HandsBrightness = 25.f;
+
+	/** How far in from the desk's back edge the hands card stands, in cm. Props in front of it (notebook, glass) stay in front of the hands. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (EditCondition = "bHandsLayer", ClampMin = "0", ClampMax = "70", UIMin = "0", UIMax = "40", Units = "cm"))
+	float HandsInset = 14.f;
+
+	/** Cast a shadow from the lamp across the desk, as if the suspect's body blocks the light (an invisible box stands in for them). */
+	UPROPERTY(EditAnywhere, Category = "Suspect")
+	bool bDeskShadow = false;
+
+	/** Where the invisible shadow box sits, in cm from the chair spot (X = away from camera, Z = height of its centre). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (EditCondition = "bDeskShadow", UIMin = "-150", UIMax = "250"))
+	FVector ShadowOffset = FVector(-35.f, 0.f, 135.f);
+
+	/** Size of the invisible shadow box in cm (depth, width, height): roughly their shoulders and head. */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (EditCondition = "bDeskShadow", ClampMin = "1", UIMin = "5", UIMax = "250"))
+	FVector ShadowSize = FVector(30.f, 110.f, 60.f);
+
+	/** How far behind the chair spot the video panel stands, in cm (bigger = further from the camera). */
+	UPROPERTY(EditAnywhere, Category = "Suspect", meta = (UIMin = "-100", UIMax = "200", Units = "cm"))
+	float VideoDepth = 30.f;
+
 	/** Actor Blueprint to use (e.g. BP_YourMetaHuman). Empty = keep the simple shape figure. */
 	UPROPERTY(EditAnywhere, Category = "Suspect")
 	TSoftClassPtr<AActor> Character;
@@ -179,6 +259,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Noir")
 	static void SaveNoirLook();
 
+	FNoirSuspectSlot* GetMutableSuspectSlot(int32 Index) { return const_cast<FNoirSuspectSlot*>(GetSuspectSlot(Index)); }
+
 	const FNoirSuspectSlot* GetSuspectSlot(int32 Index) const
 	{
 		switch (Index)
@@ -186,6 +268,9 @@ public:
 		case 0: return &Suspect1;
 		case 1: return &Suspect2;
 		case 2: return &Suspect3;
+		case 3: return &Suspect4;
+		case 4: return &Suspect5;
+		case 5: return &Suspect6;
 		default: return nullptr;
 		}
 	}
@@ -195,11 +280,20 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 1: Vera Lane (singer)"))
 	FNoirSuspectSlot Suspect1;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 2: Mickey Doyle (bartender)"))
+	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 2: Tim Telleson (bellboy)"))
 	FNoirSuspectSlot Suspect2;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 3: Harlan Graves (partner)"))
 	FNoirSuspectSlot Suspect3;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 4: Tommy Mullen (driver)"))
+	FNoirSuspectSlot Suspect4;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 5: Allison Wu (singer)"))
+	FNoirSuspectSlot Suspect5;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Suspects", meta = (DisplayName = "Suspect 6: Logan Wu (businessman)"))
+	FNoirSuspectSlot Suspect6;
 
 	/** Keep characters at full detail even though the capture is low-res (faces stay sharp). */
 	UPROPERTY(Config, EditAnywhere, Category = "Suspects")
@@ -300,15 +394,7 @@ public:
 
 	/** How far the table sits in front of the suspect (toward the camera), in cm. */
 	UPROPERTY(Config, EditAnywhere, Category = "Set", meta = (ClampMin = "40", ClampMax = "300", UIMin = "50", UIMax = "200", Units = "cm"))
-	float TableDistance = 60.f;
-
-	/** Vera's microphone stand: distance in front of her, in cm. */
-	UPROPERTY(Config, EditAnywhere, Category = "Set", meta = (ClampMin = "10", ClampMax = "120", UIMin = "15", UIMax = "80", Units = "cm"))
-	float MicDistance = 32.f;
-
-	/** Microphone height (should sit just below her mouth, ~145-155 cm). */
-	UPROPERTY(Config, EditAnywhere, Category = "Set", meta = (ClampMin = "80", ClampMax = "200", UIMin = "100", UIMax = "180", Units = "cm"))
-	float MicHeight = 148.f;
+	float TableDistance = 85.f;
 
 	// ---------------- Rim light ----------------
 

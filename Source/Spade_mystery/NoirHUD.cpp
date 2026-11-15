@@ -280,8 +280,12 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 			const FString TalkL = TEXT("TALK [T]");
 			const FString AccuseL = TEXT("ACCUSE [X]");
 			const float Gap = 4;
+			const FNoirSuspectSlot* Slot = UNoirLookSettings::Get().GetSuspectSlot(PC.Current);
+			const bool bMoods = Slot && !Slot->Video.FilePath.IsEmpty() && Slot->MoodVideos.Num() > 0;
+			const FString MoodL = bMoods ? FString::Printf(TEXT("MOOD: %s [M]"), *Slot->ActiveMoodLabel()) : FString();
 			const float RowW = ButtonW(TEXT("<"), Small) + ButtonW(Count, Small) + ButtonW(TEXT(">"), Small)
-				+ ButtonW(TalkL, Small) + ButtonW(AccuseL, Small) + Gap * 4 + 8;
+				+ ButtonW(TalkL, Small) + ButtonW(AccuseL, Small) + Gap * 4 + 8
+				+ (bMoods ? ButtonW(MoodL, Small) + Gap : 0.f);
 			const float Y = LY - 8 - ButtonH(Small);
 			float X = (LX - RowW) * 0.5f;
 			X += Button(C, TEXT("<"), X, Y, Small, ENoirAction::Prev) + Gap;
@@ -290,6 +294,10 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 			X += ButtonW(Count, Small) + Gap;
 			X += Button(C, TEXT(">"), X, Y, Small, ENoirAction::Next) + Gap + 8;
 			X += Button(C, TalkL, X, Y, Small, ENoirAction::Talk) + Gap;
+			if (bMoods)
+			{
+				X += Button(C, MoodL, X, Y, Small, ENoirAction::Mood) + Gap;
+			}
 			Button(C, AccuseL, X, Y, Small, ENoirAction::Accuse);
 		}
 

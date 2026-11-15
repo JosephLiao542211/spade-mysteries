@@ -13,6 +13,10 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "FileMediaSource.h"
+#include "MediaPlayer.h"
+#include "MediaTexture.h"
+#include "Misc/Paths.h"
 
 // Room layout (cm, local space). Camera sits at -X looking down +X at the suspect.
 namespace NoirLayout
@@ -21,7 +25,8 @@ namespace NoirLayout
 	constexpr float FrontWallX = -420.f;
 	constexpr float HalfWidth = 330.f;
 	constexpr float Height = 320.f;
-	constexpr float TableZ = 76.f;
+	constexpr float TableZ = 88.f;
+	constexpr float TableHalfWidth = 85.f; // 170 cm wide desk
 	constexpr float SuspectX = 70.f;
 }
 
@@ -39,6 +44,10 @@ ANoirRoom::ANoirRoom()
 	CylinderMesh = Cylinder.Object;
 	ConeMesh = Cone.Object;
 	BaseMaterial = Mat.Object;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Plane(TEXT("/Engine/BasicShapes/Plane.Plane"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PassThrough(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Opaque.Widget3DPassThrough_Opaque"));
+	PlaneMesh = Plane.Object;
+	VideoMaterial = PassThrough.Object;
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 }
@@ -121,16 +130,16 @@ void ANoirRoom::BuildRoom()
 	TableRoot = NewObject<USceneComponent>(this);
 	TableRoot->SetupAttachment(RootComponent);
 	TableRoot->RegisterComponent();
-	AddShape(EShape::Cube, FVector(0, 0, TableZ - 2), FVector(70, 110, 4), 0.35f, TableRoot);
-	for (const FVector2D& Leg : { FVector2D(-30, -50), FVector2D(-30, 50), FVector2D(30, -50), FVector2D(30, 50) })
+	AddShape(EShape::Cube, FVector(0, 0, TableZ - 2), FVector(70, TableHalfWidth * 2, 4), 0.35f, TableRoot);
+	for (const FVector2D& Leg : { FVector2D(-30, -(TableHalfWidth - 5)), FVector2D(-30, TableHalfWidth - 5), FVector2D(30, -(TableHalfWidth - 5)), FVector2D(30, TableHalfWidth - 5) })
 	{
 		AddShape(EShape::Cube, FVector(Leg.X, Leg.Y, (TableZ - 4) / 2), FVector(4, 4, TableZ - 4), 0.25f, TableRoot);
 	}
 	// Solid front panel so it reads as a desk and hides the suspect's legs (upper-body framing).
-	AddShape(EShape::Cube, FVector(-33, 0, (TableZ - 4) / 2), FVector(2, 106, TableZ - 4), 0.15f, TableRoot);
+	AddShape(EShape::Cube, FVector(-33, 0, (TableZ - 4) / 2), FVector(2, TableHalfWidth * 2 - 4, TableZ - 4), 0.15f, TableRoot);
 	// Props, life-size: ashtray, a whiskey glass, the detective's notebook.
-	AddShape(EShape::Cylinder, FVector(10, -32, TableZ + 1.5f), FVector(13, 13, 3), 0.6f, TableRoot);
-	AddShape(EShape::Cylinder, FVector(5, 34, TableZ + 4.5f), FVector(7, 7, 9), 0.8f, TableRoot);
+	AddShape(EShape::Cylinder, FVector(10, -48, TableZ + 1.5f), FVector(13, 13, 3), 0.6f, TableRoot);
+	AddShape(EShape::Cylinder, FVector(5, 50, TableZ + 4.5f), FVector(7, 7, 9), 0.8f, TableRoot);
 	AddShape(EShape::Cube, FVector(-22, 8, TableZ + 0.75f), FVector(14, 20, 1.5f), 0.9f, TableRoot, FRotator(0, 12, 0));
 
 	// Chair for the placeholder figure (hidden when a real character stands there).
@@ -139,15 +148,6 @@ void ANoirRoom::BuildRoom()
 	ChairRoot->RegisterComponent();
 	AddShape(EShape::Cube, FVector(SuspectX + 20, 0, 45), FVector(45, 50, 6), 0.4f, ChairRoot);
 	AddShape(EShape::Cube, FVector(SuspectX + 42, 0, 85), FVector(5, 48, 80), 0.4f, ChairRoot);
-
-	// 1940s microphone stand for the singer. Height and distance are sliders.
-	MicRoot = NewObject<USceneComponent>(this);
-	MicRoot->SetupAttachment(RootComponent);
-	MicRoot->RegisterComponent();
-	AddShape(EShape::Cylinder, FVector(0, 0, 1.5f), FVector(28, 28, 3), 0.3f, MicRoot);      // round base
-	MicPole = AddShape(EShape::Cylinder, FVector::ZeroVector, FVector(2.5f, 2.5f, 100), 0.5f, MicRoot);
-	MicHead = AddShape(EShape::Cylinder, FVector::ZeroVector, FVector(7, 7, 11), 0.9f, MicRoot);
-	MicHead->SetRelativeRotation(FRotator(-20, 0, 0)); // tilted toward her
 
 	// Hanging lamp: cord + shade on a pivot that sways.
 	LampPivot = NewObject<USceneComponent>(this);
@@ -270,6 +270,21 @@ void ANoirRoom::BuildSuspects()
 		AddShape(EShape::Cylinder, FVector(X, 0, Z + 122), FVector(24, 22, 16), Dark, R);                      // crown
 		AddShape(EShape::Cylinder, FVector(X, 0, Z + 116), FVector(25, 23, 4), 0.9f, R);                       // hat band
 	}
+	// 3: Tommy Mullen - broad shoulders, white tank top.
+	{
+		USceneComponent* R = MakeRoot();
+		Body(R, 58, Z + 100, 0.9f);
+	}
+	// 4: Allison Wu - slim, pale gown.
+	{
+		USceneComponent* R = MakeRoot();
+		Body(R, 42, Z + 98, 0.8f);
+	}
+	// 5: Logan Wu - tall, upright, striped shirt.
+	{
+		USceneComponent* R = MakeRoot();
+		Body(R, 48, Z + 106, 0.7f);
+	}
 }
 
 void ANoirRoom::ShowSuspect(int32 Index)
@@ -344,16 +359,16 @@ void ANoirRoom::DefaultPerformance(int32 Index, TSoftObjectPtr<UAnimationAsset>&
 
 void ANoirRoom::RefreshVisibility()
 {
-	const bool bReal = SuspectActors.IsValidIndex(ShownIndex) && SuspectActors[ShownIndex];
-	const FNoirSuspectSlot* ShownSlot = UNoirLookSettings::Get().GetSuspectSlot(ShownIndex);
-	const bool bSeated = ShownSlot && ShownSlot->bSeated;
-	ChairRoot->SetVisibility(true, true); // seated mocap needs a seat under her
-	MicRoot->SetVisibility(bReal && !bSeated && ShownIndex == 0, true); // Vera at the mic when standing
+	ChairRoot->SetVisibility(!HasVideo(ShownIndex), true); // a video suspect brings her own chair
 
 	for (int32 i = 0; i < SuspectRoots.Num(); ++i)
 	{
 		AActor* Real = SuspectActors.IsValidIndex(i) ? SuspectActors[i].Get() : nullptr;
-		SuspectRoots[i]->SetVisibility(i == ShownIndex && !Real, true);
+		SuspectRoots[i]->SetVisibility(i == ShownIndex && !Real && !HasVideo(i), true);
+		if (VideoPanels.IsValidIndex(i) && VideoPanels[i])
+		{
+			VideoPanels[i]->SetVisibility(i == ShownIndex && HasVideo(i));
+		}
 		if (Real)
 		{
 			Real->SetActorHiddenInGame(i != ShownIndex);
@@ -379,7 +394,8 @@ void ANoirRoom::SyncSuspectCharacters()
 		}
 
 		// (Re)spawn when the chosen character changes, so slots can be swapped live during Play.
-		const FSoftObjectPath ClassPath = Slot->Character.ToSoftObjectPath();
+		// A video suspect replaces the 3D character entirely.
+		const FSoftObjectPath ClassPath = Slot->Video.FilePath.IsEmpty() ? Slot->Character.ToSoftObjectPath() : FSoftObjectPath();
 		if (ClassPath != SuspectActorClassPaths[i])
 		{
 			SuspectActorClassPaths[i] = ClassPath;
@@ -389,7 +405,7 @@ void ANoirRoom::SyncSuspectCharacters()
 				SuspectActors[i]->Destroy();
 				SuspectActors[i] = nullptr;
 			}
-			if (UClass* Class = Slot->Character.LoadSynchronous())
+			if (UClass* Class = ClassPath.IsValid() ? Slot->Character.LoadSynchronous() : nullptr)
 			{
 				FActorSpawnParameters Params;
 				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -543,14 +559,10 @@ void ANoirRoom::ApplySettings(float T)
 	const UNoirLookSettings& Look = UNoirLookSettings::Get();
 
 	SyncSuspectCharacters();
+	SyncVideoSuspects();
 
-	// Table between detective and suspect; mic stand in front of the singer.
+	// Table between detective and suspect.
 	TableRoot->SetRelativeLocation(FVector(NoirLayout::SuspectX - Look.TableDistance, 0, 0));
-	const FNoirSuspectSlot* VeraSlot = Look.GetSuspectSlot(0);
-	MicRoot->SetRelativeLocation(FVector(NoirLayout::SuspectX - Look.MicDistance, 0, 0) + (VeraSlot ? FVector(VeraSlot->Offset.X, VeraSlot->Offset.Y, 0) : FVector::ZeroVector));
-	MicPole->SetRelativeLocation(FVector(0, 0, Look.MicHeight * 0.5f));
-	MicPole->SetRelativeScale3D(FVector(0.025f, 0.025f, Look.MicHeight / 100.f));
-	MicHead->SetRelativeLocation(FVector(0, 0, Look.MicHeight + 4.f));
 
 	// Lamp hangs straight down over the suspect; the cord stretches to reach the chosen height.
 	const float Cord = FMath::Max(NoirLayout::Height - Look.LampHeight, 5.f);
@@ -603,6 +615,172 @@ void ANoirRoom::ApplySettings(float T)
 	RimLight->SetOuterConeAngle(Look.RimConeAngle);
 	RimLight->SetInnerConeAngle(Look.RimConeAngle * 0.6f);
 	RimLight->SetVolumetricScatteringIntensity(Look.BeamStrength * 0.5f);
+}
+
+bool ANoirRoom::HasVideo(int32 Index) const
+{
+	return VideoPaths.IsValidIndex(Index) && !VideoPaths[Index].IsEmpty();
+}
+
+void ANoirRoom::SyncVideoSuspects()
+{
+	const UNoirLookSettings& Look = UNoirLookSettings::Get();
+	const int32 Num = SuspectRoots.Num();
+	VideoPanels.SetNum(Num);
+	VideoPlayers.SetNum(Num);
+	VideoTextures.SetNum(Num);
+	VideoPaths.SetNum(Num);
+	ShadowCasters.SetNum(Num);
+	HandsPanels.SetNum(Num);
+	const FVector CamLocal = GetActorTransform().InverseTransformPosition(CaptureComponent->GetComponentLocation());
+
+	bool bChanged = false;
+	for (int32 i = 0; i < Num; ++i)
+	{
+		const FNoirSuspectSlot* Slot = Look.GetSuspectSlot(i);
+		FString Path = Slot ? Slot->ActiveVideoPath() : FString();
+		if (!Path.IsEmpty() && FPaths::IsRelative(Path))
+		{
+			Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Path);
+		}
+		if (!Path.IsEmpty() && !FPaths::FileExists(Path))
+		{
+			Path.Reset(); // missing file: fall back to character / placeholder
+		}
+
+		if (Path != VideoPaths[i])
+		{
+			VideoPaths[i] = Path;
+			bChanged = true;
+			if (VideoPlayers[i])
+			{
+				VideoPlayers[i]->Close();
+			}
+			if (!Path.IsEmpty())
+			{
+				if (!VideoPlayers[i])
+				{
+					VideoPlayers[i] = NewObject<UMediaPlayer>(this);
+					VideoPlayers[i]->SetLooping(true);
+					VideoPlayers[i]->PlayOnOpen = true;
+					VideoTextures[i] = NewObject<UMediaTexture>(this);
+					VideoTextures[i]->AutoClear = true;
+					VideoTextures[i]->SetMediaPlayer(VideoPlayers[i]);
+					VideoTextures[i]->UpdateResource();
+
+					UStaticMeshComponent* Panel = NewObject<UStaticMeshComponent>(this);
+					Panel->SetStaticMesh(PlaneMesh);
+					Panel->SetupAttachment(RootComponent);
+					Panel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Panel->RegisterComponent();
+					// Cut-out card (stacked colour + matte clips) when the project material exists; plain picture otherwise.
+					UMaterialInterface* CardMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Noir/M_NoirVideoCard.M_NoirVideoCard"));
+					Panel->SetCastShadow(CardMaterial != nullptr); // the silhouette shadows the desk
+					UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(CardMaterial ? CardMaterial : VideoMaterial.Get(), Panel);
+					Mid->SetTextureParameterValue(TEXT("SlateUI"), VideoTextures[i]);
+					Mid->SetTextureParameterValue(TEXT("Video"), VideoTextures[i]);
+					Panel->SetMaterial(0, Mid);
+					VideoPanels[i] = Panel;
+
+					if (CardMaterial)
+					{
+						UStaticMeshComponent* Hands = NewObject<UStaticMeshComponent>(this);
+						Hands->SetStaticMesh(PlaneMesh);
+						Hands->SetupAttachment(RootComponent);
+						Hands->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+						Hands->SetCastShadow(false);
+						Hands->RegisterComponent();
+						UMaterialInstanceDynamic* HandsMid = UMaterialInstanceDynamic::Create(CardMaterial, Hands);
+						HandsMid->SetTextureParameterValue(TEXT("Video"), VideoTextures[i]);
+						HandsMid->SetScalarParameterValue(TEXT("Rows"), 3.f);
+						HandsMid->SetScalarParameterValue(TEXT("MatteRow"), 2.f);
+						Hands->SetMaterial(0, HandsMid);
+						Hands->SetVisibility(false);
+						HandsPanels[i] = Hands;
+					}
+				}
+				UFileMediaSource* Source = NewObject<UFileMediaSource>(this);
+				Source->SetFilePath(FPaths::ConvertRelativePathToFull(Path));
+				VideoPlayers[i]->OpenSource(Source);
+				UE_LOG(LogTemp, Display, TEXT("Noir: suspect %d video %s"), i, *Path);
+			}
+		}
+
+		// Invisible stand-in that blocks the lamp, so the suspect's shadow falls across the desk.
+		if (!ShadowCasters[i])
+		{
+			UStaticMeshComponent* Caster = NewObject<UStaticMeshComponent>(this);
+			Caster->SetStaticMesh(CubeMesh);
+			Caster->SetupAttachment(RootComponent);
+			Caster->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Caster->SetHiddenInGame(true);
+			Caster->bCastHiddenShadow = true;
+			Caster->RegisterComponent();
+			ShadowCasters[i] = Caster;
+		}
+		{
+			UStaticMeshComponent* Caster = ShadowCasters[i];
+			const bool bOn = Slot && Slot->bDeskShadow && i == ShownIndex;
+			Caster->SetCastShadow(bOn);
+			if (bOn)
+			{
+				Caster->SetRelativeLocation(FVector(NoirLayout::SuspectX, 0.f, 0.f) + Slot->Offset * FVector(1.f, 1.f, 0.f) + Slot->ShadowOffset);
+				Caster->SetRelativeScale3D(Slot->ShadowSize / 100.f);
+			}
+		}
+
+		// Place and size the panel: standing upright in the chair spot, facing the camera.
+		if (UStaticMeshComponent* Panel = VideoPanels[i])
+		{
+			const float H = Slot ? Slot->VideoHeight : 190.f;
+			const float W = H * 16.f / 9.f;
+			const FVector Offset = Slot ? Slot->Offset : FVector::ZeroVector;
+			Panel->SetRelativeLocation(FVector(NoirLayout::SuspectX + (Slot ? Slot->VideoDepth : 30.f), 0.f, H * 0.5f) + Offset);
+			// Plane faces +Z: turn it so its face points at the camera (-X), its X runs across the screen, then spin about the normal.
+			const FQuat Base = FRotationMatrix::MakeFromXY(FVector(0.f, 1.f, 0.f), FVector(0.f, 0.f, -1.f)).ToQuat();
+			const FQuat Spin(FVector(-1.f, 0.f, 0.f), FMath::DegreesToRadians(Slot ? Slot->VideoSpin : 0.f));
+			Panel->SetRelativeRotation(Spin * Base);
+			const float Mirror = (Slot && Slot->bVideoMirror) ? -1.f : 1.f;
+			Panel->SetRelativeScale3D(FVector(Mirror * W / 100.f, H / 100.f, 1.f));
+			if (UMaterialInstanceDynamic* Mid = Cast<UMaterialInstanceDynamic>(Panel->GetMaterial(0)))
+			{
+				const float B = Slot ? Slot->VideoBrightness : 40.f;
+				Mid->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor(B, B, B, 1.f));
+				Mid->SetScalarParameterValue(TEXT("Brightness"), B);
+				Mid->SetScalarParameterValue(TEXT("Lit"), Slot ? Slot->VideoLit : 1.f);
+				Mid->SetScalarParameterValue(TEXT("Rows"), (Slot && Slot->bHandsLayer) ? 3.f : 2.f);
+				Mid->SetScalarParameterValue(TEXT("MatteRow"), 1.f);
+			}
+			Panel->SetCastShadow(Slot && Slot->bVideoShadow);
+
+			// Hands card: the body card projected from the camera onto a plane just in front of the desk,
+			// so it covers the exact same pixels but is never hidden by the desktop.
+			if (UStaticMeshComponent* Hands = HandsPanels[i])
+			{
+				const bool bShow = Slot && Slot->bHandsLayer && Panel->IsVisible();
+				Hands->SetVisibility(bShow);
+				if (bShow)
+				{
+					// Just inside the desk's back edge: the lamp lights it like the body, and props nearer the camera stay in front.
+					const float FrontX = NoirLayout::SuspectX - Look.TableDistance + 35.f - Slot->HandsInset;
+					const FVector BodyLoc = Panel->GetRelativeLocation();
+					const float K = (FrontX - CamLocal.X) / FMath::Max(BodyLoc.X - CamLocal.X, 1.f);
+					Hands->SetRelativeLocation(CamLocal + (BodyLoc - CamLocal) * K);
+					Hands->SetRelativeRotation(Panel->GetRelativeRotation());
+					Hands->SetRelativeScale3D(Panel->GetRelativeScale3D() * FVector(K, K, 1.f));
+					if (UMaterialInstanceDynamic* HandsMid = Cast<UMaterialInstanceDynamic>(Hands->GetMaterial(0)))
+					{
+						HandsMid->SetScalarParameterValue(TEXT("Brightness"), Slot->HandsBrightness);
+						HandsMid->SetScalarParameterValue(TEXT("Lit"), Slot->VideoLit);
+					}
+				}
+			}
+		}
+	}
+	if (bChanged)
+	{
+		RefreshVisibility();
+	}
 }
 
 void ANoirRoom::Capture()

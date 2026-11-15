@@ -1,0 +1,11 @@
+{
+  "portrait_prompt": "Redraw the man from the second image in the exact art style of the first image: clean, elegant 1930s fashion-illustration ink, flat pure black and pure white shapes, thin confident linework, no grey shading, no hatching, no realistic rendering, slightly stylized elegant proportions like the woman in the first image. Keep his identity and pose: handsome charming hotshot leaning back in his chair with both hands clasped behind his neck, elbows wide, chiseled jaw, light stubble, swept-back wavy hair, a toothpick in his grin, white ribbed tank top, work jumpsuit tied at the waist, hairy forearms. Plain black background, centered, seated facing the camera, 16:9.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. He stays seated facing the camera. At the end he returns exactly to his starting pose. He is completely relaxed and charming: leaning back with both hands behind his neck, he rolls the toothpick slowly from one side of his mouth to the other, flashes a slow confident grin, and lets out a relaxed breath. Very little body movement, smooth and easy.",
+  "image_url": "https://v3b.fal.media/files/b/0ab26fd5/QXQHIZ3yR6KznqxOBSKp2_ibNynyFU.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1da30-bdf7-72d1-bb7f-1a7482a2336d",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da30-bdf7-72d1-bb7f-1a7482a2336d/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da30-bdf7-72d1-bb7f-1a7482a2336d"
+  }
+}

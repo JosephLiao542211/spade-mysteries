@@ -266,6 +266,104 @@ class NoirSuspectToolset(unreal.ToolsetDefinition):
         return json.dumps({name: _assign_slot(i, name) for i, name in enumerate(SUSPECT_NAMES)})
 
     @toolset_registry.tool_call
+    def make_video_material() -> str:
+        """Create /Game/Noir/M_NoirVideoCard: a lit, masked, two-sided material for cut-out suspect videos.
+        The video is stacked: top half = colour, bottom half = matte. Parameters: Video (texture), Brightness (emissive), Lit (base colour).
+
+        Returns:
+            The material path.
+        """
+        _require_not_playing()
+        path = "/Game/Noir/M_NoirVideoCard"
+        lib = unreal.EditorAssetLibrary
+        if lib.does_asset_exist(path):
+            lib.delete_asset(path)
+        mel = unreal.MaterialEditingLibrary
+        mat = unreal.AssetToolsHelpers.get_asset_tools().create_asset("M_NoirVideoCard", "/Game/Noir", unreal.Material, unreal.MaterialFactoryNew())
+        mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+        mat.set_editor_property("two_sided", True)
+        mat.set_editor_property("opacity_mask_clip_value", 0.5)
+
+        def node(cls, x, y):
+            return mel.create_material_expression(mat, cls, x, y)
+
+        # Rows = how many stacked rows the clip has (2: colour+body, 3: colour+body+hands); MatteRow = which row is the matte.
+        uv = node(unreal.MaterialExpressionTextureCoordinate, -1300, 0)
+        rows = node(unreal.MaterialExpressionScalarParameter, -1300, 150)
+        rows.set_editor_property("parameter_name", "Rows")
+        rows.set_editor_property("default_value", 2.0)
+        matte_row = node(unreal.MaterialExpressionScalarParameter, -1300, 300)
+        matte_row.set_editor_property("parameter_name", "MatteRow")
+        matte_row.set_editor_property("default_value", 1.0)
+        one = node(unreal.MaterialExpressionConstant, -1300, 450)
+        one.set_editor_property("r", 1.0)
+        zero = node(unreal.MaterialExpressionConstant, -1300, 550)
+        zero.set_editor_property("r", 0.0)
+        inv_rows = node(unreal.MaterialExpressionDivide, -1100, 200)
+        mel.connect_material_expressions(one, "", inv_rows, "A")
+        mel.connect_material_expressions(rows, "", inv_rows, "B")
+        scale = node(unreal.MaterialExpressionAppendVector, -950, 150)
+        mel.connect_material_expressions(one, "", scale, "A")
+        mel.connect_material_expressions(inv_rows, "", scale, "B")
+        uv_colour = node(unreal.MaterialExpressionMultiply, -700, 50)
+        mel.connect_material_expressions(uv, "", uv_colour, "A")
+        mel.connect_material_expressions(scale, "", uv_colour, "B")
+        shift = node(unreal.MaterialExpressionMultiply, -950, 350)
+        mel.connect_material_expressions(matte_row, "", shift, "A")
+        mel.connect_material_expressions(inv_rows, "", shift, "B")
+        down = node(unreal.MaterialExpressionAppendVector, -800, 350)
+        mel.connect_material_expressions(zero, "", down, "A")
+        mel.connect_material_expressions(shift, "", down, "B")
+        uv_matte = node(unreal.MaterialExpressionAdd, -550, 200)
+        mel.connect_material_expressions(uv_colour, "", uv_matte, "A")
+        mel.connect_material_expressions(down, "", uv_matte, "B")
+
+        default_tex = unreal.load_asset("/Engine/EngineResources/DefaultTexture")
+        colour = node(unreal.MaterialExpressionTextureSampleParameter2D, -350, 0)
+        colour.set_editor_property("parameter_name", "Video")
+        colour.set_editor_property("texture", default_tex)
+        mel.connect_material_expressions(uv_colour, "", colour, "UVs")
+        matte = node(unreal.MaterialExpressionTextureSampleParameter2D, -350, 300)
+        matte.set_editor_property("parameter_name", "Video")
+        matte.set_editor_property("texture", default_tex)
+        mel.connect_material_expressions(uv_matte, "", matte, "UVs")
+
+        lit = node(unreal.MaterialExpressionScalarParameter, -350, -200)
+        lit.set_editor_property("parameter_name", "Lit")
+        lit.set_editor_property("default_value", 1.0)
+        bright = node(unreal.MaterialExpressionScalarParameter, -350, -300)
+        bright.set_editor_property("parameter_name", "Brightness")
+        bright.set_editor_property("default_value", 1.0)
+        base = node(unreal.MaterialExpressionMultiply, -100, -100)
+        mel.connect_material_expressions(colour, "RGB", base, "A")
+        mel.connect_material_expressions(lit, "", base, "B")
+        emissive = node(unreal.MaterialExpressionMultiply, -100, 50)
+        mel.connect_material_expressions(colour, "RGB", emissive, "A")
+        mel.connect_material_expressions(bright, "", emissive, "B")
+        rough = node(unreal.MaterialExpressionConstant, -100, 200)
+        rough.set_editor_property("r", 1.0)
+
+        mel.connect_material_property(base, "", unreal.MaterialProperty.MP_BASE_COLOR)
+        mel.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        # Soft mattes (e.g. the faded hands strip) dissolve through a fixed 4x4 Bayer pattern instead of a hard cut.
+        bayer = node(unreal.MaterialExpressionCustom, -100, 350)
+        bayer.set_editor_property("code",
+            "float2 p = fmod(floor(Parameters.SvPosition.xy), 4.0);\n"
+            "float m[16] = {0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};\n"
+            "float t = (m[(int)(p.y * 4 + p.x)] + 0.5) / 16.0;\n"
+            "return A > t ? 1.0 : 0.0;")
+        bayer.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+        custom_input = unreal.CustomInput()
+        custom_input.set_editor_property("input_name", "A")
+        bayer.set_editor_property("inputs", [custom_input])
+        mel.connect_material_expressions(matte, "R", bayer, "A")
+        mel.connect_material_property(bayer, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+        mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        mel.recompile_material(mat)
+        lib.save_asset(path, only_if_is_dirty=False)
+        return path
+
+    @toolset_registry.tool_call
     def save_suspects() -> str:
         """Save every asset under /Game/Suspects (assembled MetaHumans are created in memory and must be saved).
 
@@ -430,14 +528,14 @@ class NoirSuspectToolset(unreal.ToolsetDefinition):
         task.destination_path = folder
         task.automated = True
         task.replace_existing = True
-        task.save = True
+        task.save = False  # never save (or thumbnail) the source mesh: its thumbnail crashes Metal
         options = unreal.FbxImportUI()
         options.import_mesh = True
         options.import_as_skeletal = True
         options.import_animations = True
         options.import_materials = False
         options.import_textures = False
-        options.mesh_type_to_import = unreal.FBXImportType.FIT_SKELETAL_MESH
+        options.mesh_type_to_import = unreal.FBXImportType.FBXIT_SKELETAL_MESH
         task.options = options
         assets.import_asset_tasks([task])
         found = registry.get_assets_by_path(folder, recursive=True)
@@ -509,8 +607,17 @@ class NoirSuspectToolset(unreal.ToolsetDefinition):
                 retargeted = lib.load_asset(str(a.package_name))
         if not retargeted:
             raise RuntimeError("Retarget produced no animation")
-        lib.save_directory(folder, only_if_is_dirty=False, recursive=True)
+        # Save only the retargeted clip (Vera's skeleton renders fine), then drop the temporary source assets.
+        lib.save_directory(f"{folder}/{name}", only_if_is_dirty=False, recursive=True)
         steps["animation"] = retargeted.get_path_name()
+        out_prefix = f"{folder}/{name}"
+        for a in registry.get_assets_by_path(folder, recursive=True):
+            pkg = str(a.package_name)
+            if not pkg.startswith(out_prefix):
+                try:
+                    lib.delete_asset(pkg)
+                except Exception as error:
+                    steps.setdefault("cleanup_errors", []).append(f"{pkg}: {error}")
 
         # 6. Play it on the suspect (mocap replaces the procedural pose) and save.
         look = _look()
@@ -522,6 +629,32 @@ class NoirSuspectToolset(unreal.ToolsetDefinition):
         unreal.NoirLookSettings.save_noir_look()
         steps["slot"] = slot_name
         return json.dumps(steps)
+
+    @toolset_registry.tool_call
+    def suspect_bounds() -> str:
+        """While playing: where each spawned MetaHuman suspect is: actor location, Body bounds, and key bone positions (world, cm).
+
+        Returns:
+            JSON per suspect actor.
+        """
+        world = _game_world()
+        if world is None:
+            raise RuntimeError("Not playing; call play(true) first")
+        out = []
+        for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor):
+            if "MHC_" not in actor.get_class().get_name():
+                continue
+            entry = {"actor": actor.get_name(), "location": _to_json(actor.get_actor_location()), "hidden": actor.get_editor_property("hidden")}
+            for comp in actor.get_components_by_class(unreal.SkeletalMeshComponent):
+                if comp.get_name() != "Body":
+                    continue
+                origin, extent, _ = unreal.SystemLibrary.get_component_bounds(comp)
+                entry["body_origin"] = _to_json(origin)
+                entry["body_extent"] = _to_json(extent)
+                entry["anim"] = str(comp.get_editor_property("animation_data").get_editor_property("anim_to_play"))
+                entry["bones"] = {b: _to_json(comp.get_socket_location(b)) for b in ("root", "pelvis", "head", "hand_r", "foot_l")}
+            out.append(entry)
+        return json.dumps(out)
 
     @toolset_registry.tool_call
     def quit_editor() -> str:

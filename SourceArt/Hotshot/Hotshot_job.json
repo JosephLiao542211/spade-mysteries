@@ -1,0 +1,17 @@
+{
+  "portrait_prompt": "Stylized film noir illustration, graphic novel ink style, stark black and white, crisp silhouettes, bold ink shading. Plain black background, single spotlight from above, high contrast, no color. Medium-wide shot, camera at eye level, centered, seated facing the camera behind the edge of a small dark table. A very handsome, charming 1930s hotshot in his late twenties, semi-muscular athletic build, leaning back lazily in his chair with both hands clasped behind his neck, elbows out wide, super relaxed and confident. Chiseled jaw, light stubble scruff, great wavy swept-back hair, a toothpick in the corner of his charming grin. Wearing a fitted white ribbed tank top with a mechanic's work jumpsuit unzipped and tied around his waist, defined hairy forearms and arms, heavy combat boots. Charismatic, cocky, easygoing.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. He stays seated facing the camera. At the end he returns exactly to his starting pose. He is completely relaxed and charming: leaning back with both hands behind his neck, he rolls the toothpick slowly from one side of his mouth to the other, flashes a slow confident grin, gives a lazy wink at the camera, and lets out a relaxed breath. Very little body movement, smooth and easy.",
+  "portrait_job": {
+    "model": "fal-ai/flux-pro/v1.1-ultra",
+    "request_id": "01a1da0d-db05-7de0-91ed-9a35ad411f35",
+    "status_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da0d-db05-7de0-91ed-9a35ad411f35/status",
+    "response_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da0d-db05-7de0-91ed-9a35ad411f35"
+  },
+  "image_url": "https://v3b.fal.media/files/b/0ab26ef3/DgsjflddpZ1FSIN74wKTe_c913867d557848da948118d0ac95f5ad.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1da0e-1aba-7c92-9e80-e68215eb738d",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da0e-1aba-7c92-9e80-e68215eb738d/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da0e-1aba-7c92-9e80-e68215eb738d"
+  }
+}

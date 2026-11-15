@@ -36,7 +36,8 @@ enum class ENoirAction : uint8
 	Ask3,
 	Yes,
 	No,
-	Restart
+	Restart,
+	Mood      // cycle the shown suspect's video clip (relaxed / angry / sad ...)
 };
 
 enum class ENoirState : uint8

@@ -1,0 +1,17 @@
+{
+  "portrait_prompt": "Stylized film noir illustration, graphic novel ink style, stark black and white, crisp silhouettes, bold ink shading. Plain black background, single spotlight from above, high contrast, no color. Medium-wide shot, camera at eye level, centered, seated facing the camera behind the edge of a small dark table. A large, broad-shouldered 1930s businessman in his fifties, wearing a dark double-breasted pinstripe suit, tie and a fedora tipped low so the brim's shadow covers his eyes. Square jaw with light stubble, a cigar in the corner of his mouth, both large hands clasped together on the table. Calm, serious, dignified. Big, wide, exaggerated build.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. He stays seated facing the camera. At the end he returns exactly to his starting pose. He sits almost perfectly still: hands stay clasped on the table, shoulders and head stay still, his eyes stay hidden in the hat brim's shadow. Only his mouth moves: he shifts the cigar slightly, says a few quiet words, and a slow puff of cigar smoke drifts upward.",
+  "portrait_job": {
+    "model": "fal-ai/flux-pro/v1.1-ultra",
+    "request_id": "01a1d9e4-4450-7dd2-bafa-82b95355a25c",
+    "status_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1d9e4-4450-7dd2-bafa-82b95355a25c/status",
+    "response_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1d9e4-4450-7dd2-bafa-82b95355a25c"
+  },
+  "image_url": "https://v3b.fal.media/files/b/0ab26de2/aZqnqapqM9FX9sJLx8tWr_97d1fdc01df64cf5904a77a31a07fb49.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1d9e4-8550-75b1-9db9-58137ee37d52",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1d9e4-8550-75b1-9db9-58137ee37d52/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1d9e4-8550-75b1-9db9-58137ee37d52"
+  }
+}
