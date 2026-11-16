@@ -61,10 +61,46 @@ def freeze_player(work, dest):
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed", "--noupx",
         "--name", GAME, "--icon", str(HERE / "black-spade.ico"),
         "--paths", str(PROJECT / "Tools/llm-harness"),
-        "--paths", str(HERE), "--hidden-import", "engine", "--hidden-import", "local_model",
+        "--paths", str(HERE), "--hidden-import", "engine", "--hidden-import", "local_model", "--hidden-import", "voice",
         "--distpath", str(dest), "--workpath", str(work / "freeze"), "--specpath", str(work),
         str(HERE / "player.py"),
     ], check=True)
+
+
+VOICE_MODEL = Path("Models/voice/ggml-base.en.bin")
+VOICE_MODEL_SHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+KOKORO = Path("Models/voice/kokoro-en-v0_19")
+
+
+def stage_voice(dest, crt):
+    """Optional: the microphone (whisper.cpp) and the suspects' voices (Kokoro). Same folders as voice.py reads.
+    Fetch them with Tools/fetch-voice.ps1; without them the game is packaged text-only."""
+    hear = next(iter(sorted((PROJECT / "ThirdParty/whisper").glob("*/Release/whisper-server.exe"))), None)
+    speak = next(iter(sorted((PROJECT / "ThirdParty/sherpa-onnx").glob("*/bin/sherpa-onnx-offline-tts.exe"))), None)
+    if not (hear and speak and (PROJECT / VOICE_MODEL).is_file() and (PROJECT / KOKORO / "model.onnx").is_file()):
+        print("Voice files not found: packaging a text-only game. Run Tools/fetch-voice.ps1 to include voice.", flush=True)
+        return False
+    print("Copying the voice programs and models...", flush=True)
+    target = dest / hear.parent.relative_to(PROJECT)
+    for name in ["whisper-server.exe", "whisper.dll", "ggml.dll", "ggml-base.dll"]:
+        copy_file(hear.parent / name, target / name)
+    for cpu_backend in hear.parent.glob("ggml-cpu-*.dll"):
+        copy_file(cpu_backend, target / cpu_backend.name)
+    for name in ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
+        copy_file(crt / name, target / name)
+    subprocess.run([str(target / "whisper-server.exe"), "--help"], cwd=target,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    target = dest / speak.parent.relative_to(PROJECT)
+    for name in ["sherpa-onnx-offline-tts.exe", "onnxruntime.dll", "onnxruntime_providers_shared.dll"]:
+        copy_file(speak.parent / name, target / name)
+    subprocess.run([str(target / "sherpa-onnx-offline-tts.exe"), "--help"], cwd=target,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    copy_file(PROJECT / VOICE_MODEL, dest / VOICE_MODEL)
+    with (dest / VOICE_MODEL).open("rb") as model_file:
+        if hashlib.file_digest(model_file, "sha256").hexdigest() != VOICE_MODEL_SHA256:
+            raise RuntimeError(f"Unexpected SHA-256 for {VOICE_MODEL.name}. Run Tools/fetch-voice.ps1 to restore it.")
+    shutil.copytree(PROJECT / KOKORO, dest / KOKORO)
+    return True
 
 
 def stage_game(dest):
@@ -108,6 +144,8 @@ def stage_game(dest):
         subprocess.run([str(target / "llama-server.exe"), "--version"],
                        cwd=target, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
 
+    stage_voice(dest, crt)
+
     licenses = dest / "licenses"
     shutil.copytree(HERE / "licenses", licenses)
     copy_file(PROJECT / "ThirdParty/llama/b12368-cpu/LICENSE-LLVM-OpenMP", licenses / "LLVM-OpenMP.txt")
@@ -123,7 +161,7 @@ def zip_game(dest, output):
     with zipfile.ZipFile(output, "w", allowZip64=True, compresslevel=3) as z:
         for path in files:
             # The quantized model is already compact. Storing it makes extraction quick.
-            method = zipfile.ZIP_STORED if path.suffix == ".gguf" else zipfile.ZIP_DEFLATED
+            method = zipfile.ZIP_STORED if path.suffix in (".gguf", ".onnx", ".bin") else zipfile.ZIP_DEFLATED
             z.write(path, path.relative_to(dest.parent).as_posix(), compress_type=method)
     with zipfile.ZipFile(output) as z:
         if len(z.infolist()) != len(files):

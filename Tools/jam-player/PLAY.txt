@@ -18,4 +18,11 @@ CPU backend. GPU inference requires a compatible Vulkan driver. On a CPU,
 loading and replies can take longer. If startup fails, check the model logs in
 %LOCALAPPDATA%\Black Spade\logs. Closing the game ends the current session.
 
+Voice also runs on this PC. The suspects speak their lines; turn that off with
+Voices on/off at the top. To talk instead of typing, press Speak beside the
+question box, allow the microphone when the window asks, and ask your question.
+It is written into the box as you talk and stops when you do. Press Enter to
+send it, or correct it first. Headphones keep the suspects' voices out of the
+microphone.
+
 Third-party credits and licenses are in the licenses folder.

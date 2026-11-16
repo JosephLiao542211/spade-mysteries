@@ -15,3 +15,23 @@ information. LLVM OpenMP's license and exceptions are in LLVM-OpenMP.txt.
 
 Instrument Serif is distributed under the SIL Open Font License. The license
 accompanies the fonts under static.
+
+Voice (optional; present when the ThirdParty/whisper, ThirdParty/sherpa-onnx and
+Models/voice folders are included):
+
+whisper.cpp, build b5454, by the ggml authors, turns the microphone into text.
+MIT license, in whisper.cpp.txt. The speech model is OpenAI's Whisper base.en in
+ggml format, MIT license, in Whisper-model.txt.
+https://github.com/ggml-org/whisper.cpp/releases/tag/b5454
+https://huggingface.co/ggerganov/whisper.cpp
+
+sherpa-onnx 1.13.8, by the k2-fsa project, speaks the suspects' lines. Apache
+License 2.0 (the same text as Gemma-Apache-2.0.txt). It runs on ONNX Runtime by
+Microsoft, MIT license, in ONNX-Runtime.txt.
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8
+
+The voices are Kokoro-82M v0.19 by hexgrad, Apache License 2.0; its license file
+is in Models/voice/kokoro-en-v0_19. Pronunciation uses the espeak-ng data in that
+folder. espeak-ng is distributed under the GNU General Public License version 3
+or later, in GPL-3.0.txt; its source is at https://github.com/espeak-ng/espeak-ng
+https://huggingface.co/hexgrad/Kokoro-82M

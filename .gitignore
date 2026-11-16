@@ -30,6 +30,9 @@ Build/Receipts/
 Models/
 *.gguf
 ThirdParty/llama/
+# Voice: fetched by Tools/fetch-voice.ps1
+ThirdParty/whisper/
+ThirdParty/sherpa-onnx/
 
 # Python bytecode
 __pycache__/

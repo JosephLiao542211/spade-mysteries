@@ -23,6 +23,7 @@ if not FROZEN:
     sys.path.insert(0, str(ROOT / "Tools" / "llm-harness"))
 import engine
 from local_model import LocalModel
+import voice
 
 ROLE = {
     "vera_lane": "Torch singer", "mickey_doyle": "Bartender",
@@ -386,11 +387,14 @@ def main():
     logging.basicConfig(filename=logs / "player.log", level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
     session = Session(ROOT, logs)
+    speech = voice.Voice(ROOT, logs)  # optional: microphone in, suspects' voices out
+    voice.install(RequestHandler, speech)
     server = GameServer(args.port, session)
     url = "http://" + server.address + "/"
     logging.info("Opened case at %s", url)
     try:
         session.start_model()
+        speech.start()
         if not args.no_browser:
             launch_window(url)
             threading.Thread(target=server.watch_windows, daemon=True).start()
@@ -400,6 +404,7 @@ def main():
     finally:
         server.server_close()
         session.model.close()
+        speech.close()
 
 
 if __name__ == "__main__":
