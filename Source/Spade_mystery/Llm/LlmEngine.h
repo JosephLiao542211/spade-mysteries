@@ -37,7 +37,7 @@ struct FLlmTurnEvent
 	FLlmEffects Deltas;
 	FString Revealed;
 	FString RevealedText;
-	FString Granted;
+	TArray<FString> Granted;
 	FString Gossip;
 	bool bBluff = false;
 	TArray<FString> Triggers;
@@ -46,6 +46,8 @@ struct FLlmTurnEvent
 struct FLlmAccusationResult
 {
 	bool bWin = false;
+	FString Ending; // ending id from case.json
+	FString Title;
 	FString Text;
 };
 
@@ -71,6 +73,11 @@ namespace LlmEngine
 
 	FString DetectiveMessage(const FString& Line);
 	FString EvidenceMessage(const FLlmCase& Case, const FString& EvidenceId);
+
+	/** The player repeated Source's words to Sid (typed, or by presenting Source's statement). Once per turn. */
+	void ApplyGossip(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& Source, FLlmTurnEvent& Ev);
+	/** First time Sid hears or sees an item: its effects, plus gossip if it is someone's statement. */
+	void SeeEvidence(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& EvidenceId, FLlmTurnEvent& Ev);
 	TArray<FLlmMessage> BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser);
 
 	/** Apply one exchange. Parsed = nullptr if the reply was invalid. PresentedEvidence non-empty for an evidence event.

@@ -1,4 +1,4 @@
-"""Interrogation engine: trust / fear / personal meters, secret keys, rules, evidence, bluffs, gossip.
+"""Interrogation engine: fear / personality meters, secret keys, rules, statements as evidence, bluffs, gossip, endings.
 
 The game owns all of this; the model only classifies the detective's line (t, c, g) and plays the scene.
 Mirrors Source/Spade_mystery/Llm/LlmEngine.cpp (and LlmCaseData.cpp for loading): change both together.
@@ -20,6 +20,10 @@ def load_case(case_dir):
         s = json.loads((case_dir / fname).read_text(encoding="utf-8"))
         case["suspect_defs"][s["id"]] = s
     case["evidence_by_id"] = {e["id"]: e for e in case["evidence"]}
+    for d in case["suspect_defs"].values():
+        for sec in d["secrets"]:
+            g = sec.get("grants_evidence", [])
+            sec["grants_evidence"] = [g] if isinstance(g, str) else list(g)
     return case
 
 
@@ -75,8 +79,10 @@ def add_meter(cs, sid, meter, delta):
     st, d = cs.suspects[sid], cs.sdef(sid)
     if meter not in st.meters:
         return
-    if meter == "trust" and delta > 0 and st.meters.get("fear", 0) >= d.get("fear_dampens_trust_above", 60):
-        delta *= 0.5  # frightened people don't confide
+    if delta > 0:
+        for dm in d.get("dampen", []):  # e.g. frightened people don't confide: loyalty gains halved while fear is high
+            if dm["meter"] == meter and cond_ok(dm["when"], st):
+                delta *= dm["factor"]
     st.meters[meter] = max(0.0, min(100.0, st.meters[meter] + delta))
 
 
@@ -137,9 +143,9 @@ def static_system(case, sid):
             f"RULES:\n{rules}\n\n"
             "OUTPUT: Answer only with JSON.\n"
             f"t = the detective's tactic in their LAST line, one of: {tactics}.\n"
-            f"c = the evidence the detective claims to HAVE or shows you in their LAST line, one of: {evidence}; "
-            "or none. Only asking about something is not claiming to have it: then c is none. "
-            "These labels are only for classifying; never bring these items up yourself.\n"
+            f"c = the statement or evidence the detective claims to HAVE, repeats or shows you in their LAST line, "
+            f"one of: {evidence}; or none. Only asking about something is not claiming to have it: then c is none. "
+            "These labels are only for classifying; never bring them up yourself.\n"
             f"g = whose words the detective is repeating to you in their LAST line, one of: {others}; or none.\n"
             "f = the id of a secret from SECRETS YOU WILL ADMIT whose topic the detective's line touches, "
             "otherwise none; if f is not none, r must say that secret. e = your emotion. r = your spoken reply.")
@@ -194,7 +200,34 @@ def detective_message(line):
 
 
 def evidence_message(case, eid):
-    return f"[EVIDENCE] The detective places this on the table: {case['evidence_by_id'][eid]['description']}."
+    e = case["evidence_by_id"][eid]
+    if e.get("source"):
+        return f"[EVIDENCE] The detective tells you what another witness said: {e['description']}."
+    return f"[EVIDENCE] The detective places this on the table: {e['description']}."
+
+
+def apply_gossip(cs, sid, source, ev):
+    """The detective repeated `source`'s words to `sid` (typed, or by presenting their statement). Once per turn."""
+    if source == sid or source not in cs.suspects or ev["gossip"] == source:
+        return
+    ev["gossip"] = source
+    apply_effects(cs, source, cs.sdef(source).get("gossip_cost"))
+    heard = cs.sdef(sid).get("gossip_heard", {})
+    apply_effects(cs, sid, heard.get("self"))
+    apply_effects(cs, source, heard.get("source"))
+    cs.log.append(f"{sid} heard {source}'s words")
+
+
+def see_evidence(cs, sid, eid, ev):
+    """First time this suspect hears or sees an item: its effects, plus gossip if it is someone's statement."""
+    st = cs.suspects[sid]
+    if eid in st.evidence_seen:
+        return
+    st.evidence_seen.add(eid)
+    apply_effects(cs, sid, cs.sdef(sid).get("evidence_effects", {}).get(eid))
+    src = cs.case["evidence_by_id"][eid].get("source")
+    if src:
+        apply_gossip(cs, sid, src, ev)
 
 
 def build_messages(cs, sid, last_user):
@@ -213,35 +246,31 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
     """Apply the outcome of one exchange. parsed = model JSON (or None). presented = evidence id if this turn
     was an evidence presentation event. Returns a dict describing what happened."""
     st, d, case = cs.suspects[sid], cs.sdef(sid), cs.case
-    ev = {"deltas": {}, "revealed": None, "granted": None, "bluff": False, "gossip": None, "triggers": []}
+    ev = {"deltas": {}, "revealed": None, "granted": [], "bluff": False, "gossip": None, "triggers": []}
     before = dict(st.meters)
     was_shutdown = st.shutdown_left > 0
     st.caught_bluff = False
 
     if presented:
-        if presented not in st.evidence_seen:
-            st.evidence_seen.add(presented)
-            apply_effects(cs, sid, d.get("evidence_effects", {}).get(presented))
+        see_evidence(cs, sid, presented, ev)
     elif parsed:
         apply_effects(cs, sid, d["tactic_effects"].get(parsed["t"]))
-        c = parsed.get("c", NONE)
+        c, g = parsed.get("c", NONE), parsed.get("g", NONE)
+        src = case["evidence_by_id"].get(c, {}).get("source")
+        if g != NONE and src and src != g:
+            # "Vera says she saw you..." came back as g=vera_lane, c=<Mickey's statement about Vera>: inconsistent,
+            # and treating it as a claim made it a false bluff. Trust g and drop c.
+            c = NONE
         if c != NONE:
             if c in cs.inventory:
-                if c not in st.evidence_seen:
-                    st.evidence_seen.add(c)
-                    apply_effects(cs, sid, d.get("evidence_effects", {}).get(c))
+                see_evidence(cs, sid, c, ev)
             else:
                 ev["bluff"] = True
                 st.caught_bluff = "bluff_note" in d  # only suspects who see through bluffs notice
                 apply_effects(cs, sid, d.get("bluff_effects"))
         g = parsed.get("g", NONE)
-        if g != NONE and g != sid and g in cs.suspects:
-            ev["gossip"] = g
-            add_meter(cs, g, "trust", -cs.sdef(g).get("gossip_penalty", 10))
-            heard = d.get("gossip_heard", {})
-            apply_effects(cs, sid, heard.get("self"))
-            apply_effects(cs, g, heard.get("source"))
-            cs.log.append(f"{sid} heard {g}'s words; {g} trust now {cs.suspects[g].meters['trust']:.0f}")
+        if g != NONE:
+            apply_gossip(cs, sid, g, ev)
 
     if parsed:
         f = parsed.get("f", NONE)
@@ -249,9 +278,10 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
             st.revealed[f] = allowed[f]
             ev["revealed"] = f
             sec = next(s for s in d["secrets"] if s["id"] == f)
-            if sec.get("grants_evidence"):
-                cs.inventory.add(sec["grants_evidence"])
-                ev["granted"] = sec["grants_evidence"]
+            for g in sec["grants_evidence"]:
+                if g not in cs.inventory:
+                    cs.inventory.add(g)
+                    ev["granted"].append(g)
 
     if was_shutdown:
         st.shutdown_left -= 1
@@ -275,6 +305,8 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
             st.after_shutdown_set = r.get("after_shutdown_set", {})
         if r.get("end_interview"):
             st.closed = True
+        for oid in r.get("close_others", []):  # e.g. he walks out and takes his wife with him
+            cs.suspects[oid].closed = True
         for oid in cs.suspects:
             if oid != sid:
                 apply_effects(cs, oid, r.get("others"))
@@ -286,28 +318,44 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
 
 # ---------- accusation ----------
 
+def ending(acc, eid, **subs):
+    e = acc["endings"][eid]
+    text = e["text"]
+    for k, v in subs.items():
+        text = text.replace("{" + k + "}", v)
+    return e["title"], text
+
+
 def accuse(cs, accused):
+    """Returns {win, ending, title, text}. Proof = every entry in `proofs` backed by a witness who revealed the
+    secret, is still in the club, and whose meters still meet `when`; otherwise that witness takes it back."""
     acc = cs.case["accusation"]
-    if accused != acc["culprit"]:
-        return False, acc["wrong_text"]
-    cst = cs.suspects[acc["culprit"]]
-    if any(s in cst.revealed for s in acc.get("confession_secrets", [])):
-        return True, acc["win_text"] + " (He gave himself away under questioning.)"
+    name = cs.sdef(accused)["name"]
     missing, notes = [], []
-    if not any(e in cs.inventory for e in acc["motive_evidence"]):
-        missing.append("a motive")
-    if not any(e in cs.inventory for e in acc["physical_evidence"]):
-        missing.append("physical evidence placing him at the scene")
-    ok_witness = False
-    for w in acc["testimony"]:
-        ws = cs.suspects[w["suspect"]]
-        if w["secret"] in ws.revealed:
-            if ws.meters["trust"] >= w["min_trust"]:
-                ok_witness = True
-            else:
-                notes.append(f"{cs.sdef(w['suspect'])['name']} takes back their statement: they don't trust you enough to testify.")
-    if not ok_witness:
-        missing.append("a witness willing to testify he left the table")
-    if missing:
-        return False, "Not enough to hold him: missing " + ", ".join(missing) + ". " + " ".join(notes)
-    return True, acc["win_text"]
+    if accused != acc["culprit"]:
+        eid = acc["on_wrong"].get(accused, acc["on_wrong"]["default"])
+    elif any(sec in cs.suspects[accused].revealed for sec in acc.get("confession_secrets", [])):
+        eid = acc["on_confession"]
+    else:
+        for proof in acc["proofs"]:
+            ok = False
+            for w in proof["witnesses"]:
+                ws, wname = cs.suspects[w["suspect"]], cs.sdef(w["suspect"])["name"]
+                if w["secret"] not in ws.revealed:
+                    continue
+                if ws.closed:
+                    notes.append(f"{wname} has left the club and won't testify.")
+                elif not cond_ok(w.get("when", {}), ws):
+                    notes.append(w.get("recant", f"{wname} takes back their statement."))
+                else:
+                    ok = True
+            if not ok:
+                missing.append(proof["label"])
+        eid = acc["on_no_case"] if missing else acc["on_proof"]
+    title, text = ending(acc, eid, name=name, missing=", ".join(missing))
+    for n in dict.fromkeys(notes):
+        text += " " + n
+    for ep in acc.get("epilogues", []):
+        if cond_ok(ep["when"], cs.suspects[ep["suspect"]]) and (not ep.get("endings") or eid in ep["endings"]):
+            text += " " + ep["text"]
+    return {"win": eid in (acc["on_confession"], acc["on_proof"]), "ending": eid, "title": title, "text": text}

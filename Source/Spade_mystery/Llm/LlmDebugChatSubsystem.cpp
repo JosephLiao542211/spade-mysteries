@@ -155,14 +155,14 @@ void ULlmDebugChatSubsystem::OnPresent(const FString& EvidenceId)
 		Append(CurrentSuspect, TEXT("(not shown: server not ready or a reply is still coming)"));
 		return;
 	}
-	Append(CurrentSuspect, FString::Printf(TEXT("DETECTIVE shows: %s"), E ? *E->Name : *EvidenceId));
+	Append(CurrentSuspect, FString::Printf(TEXT("DETECTIVE %s: %s"), E && !E->Source.IsEmpty() ? TEXT("repeats") : TEXT("shows"), E ? *E->Name : *EvidenceId));
 	RefreshStatus();
 }
 
 void ULlmDebugChatSubsystem::OnAccuse()
 {
 	const FLlmAccusationResult R = Session->Accuse(CurrentSuspect);
-	Append(CurrentSuspect, FString::Printf(TEXT("== ACCUSATION of %s: %s %s"), *SuspectName(CurrentSuspect), R.bWin ? TEXT("CASE SOLVED.") : TEXT("FAILED."), *R.Text));
+	Append(CurrentSuspect, FString::Printf(TEXT("== ACCUSATION of %s: %s (%s). %s"), *SuspectName(CurrentSuspect), R.bWin ? TEXT("CASE SOLVED") : TEXT("FAILED"), *R.Title, *R.Text));
 }
 
 void ULlmDebugChatSubsystem::OnReply(const FInterrogationReply& Reply)
@@ -186,7 +186,10 @@ void ULlmDebugChatSubsystem::OnReply(const FInterrogationReply& Reply)
 		Meta += FString::Printf(TEXT("  |  read %d tok, gen %d tok, %.2fs"), Reply.PromptTokens, Reply.GeneratedTokens, Reply.Seconds);
 		Append(Sid, Meta);
 		if (!Reply.RevealedText.IsEmpty()) Append(Sid, TEXT("    *** CLUE: ") + Reply.RevealedText);
-		if (const FLlmEvidence* E = Session->GetCase().FindEvidence(Reply.GrantedEvidenceId)) Append(Sid, TEXT("    +++ NEW EVIDENCE: ") + E->Name);
+		for (const FString& G : Reply.GrantedEvidenceIds)
+		{
+			if (const FLlmEvidence* E = Session->GetCase().FindEvidence(G)) Append(Sid, TEXT("    +++ NEW IN NOTEBOOK: ") + E->Name);
+		}
 		for (const FString& N : Reply.TriggeredNotes) Append(Sid, TEXT("    !!! ") + N);
 	}
 	RebuildEvidenceButtons();
@@ -230,7 +233,7 @@ void ULlmDebugChatSubsystem::RefreshStatus()
 	if (Def && St)
 	{
 		S += TEXT("\nMeters:");
-		for (const FLlmMeterDef& M : Def->Meters) S += FString::Printf(TEXT("  %s %.0f"), *M.Name, St->Meter(M.Name));
+		for (const FLlmMeterDef& M : Def->Meters) S += FString::Printf(TEXT("  %s %.0f"), M.Label.IsEmpty() ? *M.Name : *M.Label, St->Meter(M.Name));
 		if (St->ShutdownLeft > 0) S += FString::Printf(TEXT("  |  SHUT DOWN for %d more turns"), St->ShutdownLeft);
 		if (St->bClosed) S += TEXT("  |  INTERVIEW CLOSED");
 		S += Session->IsBusy(CurrentSuspect) ? TEXT("  |  thinking...") : TEXT("  |  your turn");
@@ -250,7 +253,7 @@ void ULlmDebugChatSubsystem::RebuildEvidenceButtons()
 		EvidenceBox->AddSlot().Padding(2)
 		[
 			SNew(SButton)
-			.Text(FText::FromString(TEXT("Show: ") + E.Name))
+			.Text(FText::FromString((E.Source.IsEmpty() ? TEXT("Show: ") : TEXT("Repeat: ")) + E.Name))
 			.ToolTipText(FText::FromString(E.Description))
 			.OnClicked_Lambda([WeakThis, Id]()
 			{

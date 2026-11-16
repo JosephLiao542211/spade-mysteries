@@ -220,7 +220,7 @@ void UInterrogationSession::HandleReply(const FString& SuspectId, const FString&
 	Out.bBluffDetected = Ev.bBluff;
 	Out.RevealedSecretId = Ev.Revealed;
 	Out.RevealedText = Ev.RevealedText;
-	Out.GrantedEvidenceId = Ev.Granted;
+	Out.GrantedEvidenceIds = Ev.Granted;
 	Out.TriggeredNotes = Ev.Triggers;
 	if (const FLlmSuspectState* St = State.Suspects.Find(SuspectId))
 	{

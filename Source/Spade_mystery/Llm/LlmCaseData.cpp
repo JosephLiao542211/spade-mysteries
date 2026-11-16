@@ -106,8 +106,16 @@ namespace
 		S.Name = Str(J, TEXT("name"));
 		S.Character = Str(J, TEXT("character"));
 		J->TryGetNumberField(TEXT("slot"), S.Slot);
-		J->TryGetNumberField(TEXT("fear_dampens_trust_above"), S.FearDampensTrustAbove);
-		J->TryGetNumberField(TEXT("gossip_penalty"), S.GossipPenalty);
+		for (const auto& V : Arr(J, TEXT("dampen")))
+		{
+			const TSharedPtr<FJsonObject> O = V->AsObject();
+			FLlmDampen D;
+			D.Meter = Str(O, TEXT("meter"));
+			D.When = Condition(Obj(O, TEXT("when")));
+			O->TryGetNumberField(TEXT("factor"), D.Factor);
+			S.Dampen.Add(D);
+		}
+		S.GossipCost = Effects(Obj(J, TEXT("gossip_cost")));
 		S.BluffNote = Str(J, TEXT("bluff_note"));
 
 		for (const auto& V : Arr(J, TEXT("claims")))
@@ -122,6 +130,7 @@ namespace
 				const TSharedPtr<FJsonObject> M = KV.Value->AsObject();
 				FLlmMeterDef Def;
 				Def.Name = KV.Key;
+				Def.Label = Str(M, TEXT("label"));
 				Def.Start = static_cast<float>(M->GetNumberField(TEXT("start")));
 				Def.Words = Words(Arr(M, TEXT("words")));
 				S.Meters.Add(Def);
@@ -147,6 +156,7 @@ namespace
 			R.AfterShutdownSet = Effects(Obj(O, TEXT("after_shutdown_set")));
 			O->TryGetBoolField(TEXT("end_interview"), R.bEndInterview);
 			R.Others = Effects(Obj(O, TEXT("others")));
+			R.CloseOthers = StrArray(O, TEXT("close_others"));
 			S.Rules.Add(R);
 		}
 		for (const auto& V : Arr(J, TEXT("secrets")))
@@ -156,7 +166,12 @@ namespace
 			Sec.Id = Str(O, TEXT("id"));
 			Sec.Topic = Str(O, TEXT("topic"));
 			Sec.Text = Str(O, TEXT("text"));
-			Sec.GrantsEvidence = Str(O, TEXT("grants_evidence"));
+			// A single id or a list.
+			if (!O->TryGetStringArrayField(TEXT("grants_evidence"), Sec.GrantsEvidence))
+			{
+				const FString One = Str(O, TEXT("grants_evidence"));
+				if (!One.IsEmpty()) Sec.GrantsEvidence.Add(One);
+			}
 			for (const auto& RV : Arr(O, TEXT("routes")))
 			{
 				const TSharedPtr<FJsonObject> RO = RV->AsObject();
@@ -209,6 +224,7 @@ bool LlmCaseData::LoadCase(const FString& CaseDir, FLlmCase& Out, FString& OutEr
 		E.Id = Str(O, TEXT("id"));
 		E.Name = Str(O, TEXT("name"));
 		E.Description = Str(O, TEXT("description"));
+		E.Source = Str(O, TEXT("source"));
 		O->TryGetBoolField(TEXT("found_at_start"), E.bFoundAtStart);
 		Out.Evidence.Add(E);
 	}
@@ -223,18 +239,37 @@ bool LlmCaseData::LoadCase(const FString& CaseDir, FLlmCase& Out, FString& OutEr
 		FLlmAccusation& Acc = Out.Accusation;
 		Acc.Culprit = Str(A, TEXT("culprit"));
 		Acc.ConfessionSecrets = StrArray(A, TEXT("confession_secrets"));
-		Acc.MotiveEvidence = StrArray(A, TEXT("motive_evidence"));
-		Acc.PhysicalEvidence = StrArray(A, TEXT("physical_evidence"));
-		Acc.WrongText = Str(A, TEXT("wrong_text"));
-		Acc.WinText = Str(A, TEXT("win_text"));
-		for (const auto& V : Arr(A, TEXT("testimony")))
+		Acc.OnConfession = Str(A, TEXT("on_confession"));
+		Acc.OnProof = Str(A, TEXT("on_proof"));
+		Acc.OnNoCase = Str(A, TEXT("on_no_case"));
+		if (const TSharedPtr<FJsonObject> W = Obj(A, TEXT("on_wrong")))
+		{
+			for (const auto& KV : W->Values) Acc.OnWrong.Add(KV.Key, KV.Value->AsString());
+		}
+		if (const TSharedPtr<FJsonObject> E = Obj(A, TEXT("endings")))
+		{
+			for (const auto& KV : E->Values)
+			{
+				const TSharedPtr<FJsonObject> EO = KV.Value->AsObject();
+				Acc.Endings.Add(KV.Key, FLlmEnding{ Str(EO, TEXT("title")), Str(EO, TEXT("text")) });
+			}
+		}
+		for (const auto& V : Arr(A, TEXT("proofs")))
 		{
 			const TSharedPtr<FJsonObject> O = V->AsObject();
-			FLlmTestimonyReq T;
-			T.Suspect = Str(O, TEXT("suspect"));
-			T.Secret = Str(O, TEXT("secret"));
-			O->TryGetNumberField(TEXT("min_trust"), T.MinTrust);
-			Acc.Testimony.Add(T);
+			FLlmProof P;
+			P.Label = Str(O, TEXT("label"));
+			for (const auto& WV : Arr(O, TEXT("witnesses")))
+			{
+				const TSharedPtr<FJsonObject> WO = WV->AsObject();
+				P.Witnesses.Add({ Str(WO, TEXT("suspect")), Str(WO, TEXT("secret")), Condition(Obj(WO, TEXT("when"))), Str(WO, TEXT("recant")) });
+			}
+			Acc.Proofs.Add(P);
+		}
+		for (const auto& V : Arr(A, TEXT("epilogues")))
+		{
+			const TSharedPtr<FJsonObject> O = V->AsObject();
+			Acc.Epilogues.Add({ Str(O, TEXT("suspect")), Condition(Obj(O, TEXT("when"))), Str(O, TEXT("text")), StrArray(O, TEXT("endings")) });
 		}
 	}
 	return true;

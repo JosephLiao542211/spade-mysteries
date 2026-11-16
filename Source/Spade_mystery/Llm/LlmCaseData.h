@@ -20,8 +20,10 @@ struct FLlmCondition
 struct FLlmMeterDef
 {
 	FString Name;
+	/** Shown on the suspect's bar in the UI ("Composure"). Empty = Name. */
+	FString Label;
 	float Start = 0.f;
-	/** Empty = use the case's default words for this meter (trust, fear). */
+	/** Empty = use the case's default words for this meter (fear). */
 	FLlmMeterWords Words;
 };
 
@@ -37,6 +39,8 @@ struct FLlmRule
 	bool bEndInterview = false;
 	/** Applied to every other suspect when a trigger fires. */
 	FLlmEffects Others;
+	/** Suspects whose interviews also end when this trigger fires (he walks out and takes his wife with him). */
+	TArray<FString> CloseOthers;
 };
 
 struct FLlmSecretRoute
@@ -51,7 +55,7 @@ struct FLlmSecret
 	FString Id;
 	FString Topic;
 	FString Text;
-	FString GrantsEvidence;
+	TArray<FString> GrantsEvidence;
 	TArray<FLlmSecretRoute> Routes;
 };
 
@@ -59,6 +63,14 @@ struct FLlmClaim
 {
 	FString Id;
 	FString Text;
+};
+
+/** Positive changes to Meter are multiplied by Factor while When holds (frightened men don't think about loyalty). */
+struct FLlmDampen
+{
+	FString Meter;
+	FLlmCondition When;
+	float Factor = 1.f;
 };
 
 struct FLlmSuspectDef
@@ -69,13 +81,15 @@ struct FLlmSuspectDef
 	int32 Slot = 0;
 	TArray<FLlmClaim> Claims;
 	TArray<FLlmMeterDef> Meters; // ordered: state note lists them in this order
-	float FearDampensTrustAbove = 60.f;
+	TArray<FLlmDampen> Dampen;
 	TMap<FString, FLlmEffects> TacticEffects;
 	TMap<FString, FLlmEffects> EvidenceEffects;
 	FLlmEffects BluffEffects;
 	/** Non-empty = this suspect sees through bluffs and the next state note says so. */
 	FString BluffNote;
-	float GossipPenalty = 10.f;
+	/** Applied to this suspect whenever the player repeats their words to anyone. */
+	FLlmEffects GossipCost;
+	/** When the player repeats someone's words to THIS suspect: effects on this suspect and on the quoted one. */
 	FLlmEffects GossipHeardSelf;
 	FLlmEffects GossipHeardSource;
 	TArray<FLlmRule> Rules;
@@ -90,25 +104,55 @@ struct FLlmEvidence
 	FString Id;
 	FString Name;
 	FString Description;
+	/** Non-empty = a statement by this suspect. Presenting it to someone else counts as repeating their words. */
+	FString Source;
 	bool bFoundAtStart = false;
 };
 
-struct FLlmTestimonyReq
+/** A witness backs a proof if they revealed Secret, are still in the club, and When still holds for them. */
+struct FLlmWitness
 {
 	FString Suspect;
 	FString Secret;
-	float MinTrust = 0.f;
+	FLlmCondition When;
+	/** Said when When fails. Empty = "<name> takes back their statement." */
+	FString Recant;
+};
+
+struct FLlmProof
+{
+	FString Label; // "a motive": listed when missing
+	TArray<FLlmWitness> Witnesses; // any one is enough
+};
+
+struct FLlmEnding
+{
+	FString Title;
+	/** "{name}" = the accused, "{missing}" = the proofs that were missing. */
+	FString Text;
+};
+
+/** Added to the ending text when When holds for Suspect (and the ending is one of Endings, if any are listed). */
+struct FLlmEpilogue
+{
+	FString Suspect;
+	FLlmCondition When;
+	FString Text;
+	TArray<FString> Endings;
 };
 
 struct FLlmAccusation
 {
 	FString Culprit;
 	TArray<FString> ConfessionSecrets;
-	TArray<FString> MotiveEvidence;
-	TArray<FString> PhysicalEvidence;
-	TArray<FLlmTestimonyReq> Testimony;
-	FString WrongText;
-	FString WinText;
+	TArray<FLlmProof> Proofs; // all are needed without a confession
+	TMap<FString, FLlmEnding> Endings;
+	FString OnConfession;
+	FString OnProof;
+	FString OnNoCase;
+	/** Suspect id (or "default") -> ending id for accusing the wrong person. */
+	TMap<FString, FString> OnWrong;
+	TArray<FLlmEpilogue> Epilogues;
 };
 
 struct FLlmCase

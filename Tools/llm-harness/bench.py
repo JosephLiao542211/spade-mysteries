@@ -36,7 +36,8 @@ MAX_TOKENS = 160
 # Gemma 4 sometimes opens a "<|channel>thought" block on its own even with enable_thinking=false, burning the
 # whole token budget and returning empty content. Replaying one turn 15x: --reasoning off alone 11/15 valid,
 # + --reasoning-format none 13/15, + --reasoning-budget 0 15/15. Keep both flags.
-COMMON = ["-c", "16384", "--parallel", "4", "--jinja", "--no-webui", "-fa", "on",
+# One slot per suspect (6), 4096 tokens each.
+COMMON = ["-c", "24576", "--parallel", "6", "--jinja", "--no-webui", "-fa", "on",
           "-ctk", "q8_0", "-ctv", "q8_0", "--reasoning", "off", "--reasoning-budget", "0"]
 
 CONFIGS = {
@@ -133,7 +134,7 @@ def play_script(case, script):
         obj, err = parse(content, sch)
         # Same as the game: an invalid reply changes nothing and never enters the history.
         ev = (engine.resolve_turn(cs, sid, user_msg, obj, content, allowed, presented=presented) if obj else
-              {"deltas": {}, "revealed": None, "granted": None, "bluff": False, "gossip": None, "triggers": []})
+              {"deltas": {}, "revealed": None, "granted": [], "bluff": False, "gossip": None, "triggers": []})
         tm = data.get("timings", {})
         turn = {
             "say": step.get("say"), "present": presented, "expect": step.get("expect"),
@@ -180,7 +181,7 @@ def summarize(name, script, res):
         "avg_gen": round(sum(t["predicted_n"] or 0 for t in played) / max(1, len(played))),
     }
     if "accusation" in res:
-        row["accusation"] = "WIN" if res["accusation"][0] else "no"
+        row["accusation"] = res["accusation"]["ending"]
     return row
 
 
@@ -222,7 +223,7 @@ def run_config(name, case, scripts):
 
 
 def write_transcript(name, case, scripts, full):
-    lines = [f"# Spade Club transcripts: {name}\n"]
+    lines = [f"# Black Spade transcripts: {name}\n"]
     for script in scripts:
         res = full["scripts"][script["name"]]
         lines.append(f"## {script['name']} ({case['suspect_defs'][script['suspect']]['name']})\n\n_{script['goal']}_\n")
@@ -247,7 +248,7 @@ def write_transcript(name, case, scripts, full):
                          f"  - t={t['got_t']}{mark}, c={t['c']}, g={t['g']}, f={t['f']} | "
                          f"meters {t['meters']} | {t['wall_s']}s" + (" | " + "; ".join(extra) if extra else ""))
         lines.append(f"\nRevealed: {list(res['revealed']) or 'nothing'}"
-                     + (f"\n\nAccusation: {res['accusation'][1]}" if "accusation" in res else "") + "\n")
+                     + (f"\n\nAccusation ({res['accusation']['title']}): {res['accusation']['text']}" if "accusation" in res else "") + "\n")
     (OUT / f"spade-{name}-transcript.md").write_text("\n".join(lines), encoding="utf-8")
 
 

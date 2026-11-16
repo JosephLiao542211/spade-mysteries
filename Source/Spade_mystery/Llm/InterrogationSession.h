@@ -34,7 +34,8 @@ struct FInterrogationReply
 	/** Secret accepted this turn, with its canonical text for the clue card. */
 	UPROPERTY(BlueprintReadOnly) FString RevealedSecretId;
 	UPROPERTY(BlueprintReadOnly) FString RevealedText;
-	UPROPERTY(BlueprintReadOnly) FString GrantedEvidenceId;
+	/** Statements or items the player gained this turn (a secret can grant several). */
+	UPROPERTY(BlueprintReadOnly) TArray<FString> GrantedEvidenceIds;
 
 	UPROPERTY(BlueprintReadOnly) bool bInterviewClosed = false;
 	UPROPERTY(BlueprintReadOnly) TArray<FString> TriggeredNotes;

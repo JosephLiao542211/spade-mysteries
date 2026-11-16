@@ -45,9 +45,12 @@ void LlmEngine::AddMeter(const FLlmCase& Case, FLlmCaseState& State, const FStri
 	if (!St || !Def) return;
 	float* V = St->Meters.Find(Meter);
 	if (!V) return;
-	if (Meter == TEXT("trust") && Delta > 0.f && St->Meter(TEXT("fear")) >= Def->FearDampensTrustAbove)
+	if (Delta > 0.f)
 	{
-		Delta *= 0.5f; // frightened people don't confide
+		for (const FLlmDampen& D : Def->Dampen)
+		{
+			if (D.Meter == Meter && CondOk(D.When, *St)) Delta *= D.Factor;
+		}
 	}
 	*V = FMath::Clamp(*V + Delta, 0.f, 100.f);
 }
@@ -126,9 +129,9 @@ FString LlmEngine::StaticSystem(const FLlmCase& Case, const FString& Sid)
 	return FString::Printf(TEXT("SETTING: %s\n\nWHO YOU ARE: %s\n\nWHAT YOU HAVE TOLD THE POLICE:\n%s\n\nRULES:\n%s\n\n"), *Case.Setting, *S->Character, *Join(Claims, TEXT("\n")), *Join(Rules, TEXT("\n")))
 		+ TEXT("OUTPUT: Answer only with JSON.\n")
 		+ FString::Printf(TEXT("t = the detective's tactic in their LAST line, one of: %s.\n"), *Join(Tactics, TEXT("; ")))
-		+ FString::Printf(TEXT("c = the evidence the detective claims to HAVE or shows you in their LAST line, one of: %s; "), *Join(Evidence, TEXT("; ")))
-		+ TEXT("or none. Only asking about something is not claiming to have it: then c is none. ")
-		+ TEXT("These labels are only for classifying; never bring these items up yourself.\n")
+		+ TEXT("c = the statement or evidence the detective claims to HAVE, repeats or shows you in their LAST line, ")
+		+ FString::Printf(TEXT("one of: %s; or none. Only asking about something is not claiming to have it: then c is none. "), *Join(Evidence, TEXT("; ")))
+		+ TEXT("These labels are only for classifying; never bring them up yourself.\n")
 		+ FString::Printf(TEXT("g = whose words the detective is repeating to you in their LAST line, one of: %s; or none.\n"), *Join(Others, TEXT("; ")))
 		+ TEXT("f = the id of a secret from SECRETS YOU WILL ADMIT whose topic the detective's line touches, ")
 		+ TEXT("otherwise none; if f is not none, r must say that secret. e = your emotion. r = your spoken reply.");
@@ -222,7 +225,33 @@ FString LlmEngine::DetectiveMessage(const FString& Line)
 FString LlmEngine::EvidenceMessage(const FLlmCase& Case, const FString& EvidenceId)
 {
 	const FLlmEvidence* E = Case.FindEvidence(EvidenceId);
+	if (E && !E->Source.IsEmpty())
+	{
+		return FString::Printf(TEXT("[EVIDENCE] The detective tells you what another witness said: %s."), *E->Description);
+	}
 	return FString::Printf(TEXT("[EVIDENCE] The detective places this on the table: %s."), E ? *E->Description : *EvidenceId);
+}
+
+void LlmEngine::ApplyGossip(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& Source, FLlmTurnEvent& Ev)
+{
+	const FLlmSuspectDef* Def = Case.FindSuspect(Sid);
+	const FLlmSuspectDef* Src = Case.FindSuspect(Source);
+	if (!Def || !Src || Source == Sid || Ev.Gossip == Source) return;
+	Ev.Gossip = Source;
+	ApplyEffects(Case, State, Source, &Src->GossipCost);
+	ApplyEffects(Case, State, Sid, &Def->GossipHeardSelf);
+	ApplyEffects(Case, State, Source, &Def->GossipHeardSource);
+}
+
+void LlmEngine::SeeEvidence(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& EvidenceId, FLlmTurnEvent& Ev)
+{
+	const FLlmSuspectDef* Def = Case.FindSuspect(Sid);
+	FLlmSuspectState* St = State.Suspects.Find(Sid);
+	if (!Def || !St || St->EvidenceSeen.Contains(EvidenceId)) return;
+	St->EvidenceSeen.Add(EvidenceId);
+	ApplyEffects(Case, State, Sid, Def->EvidenceEffects.Find(EvidenceId));
+	const FLlmEvidence* E = Case.FindEvidence(EvidenceId);
+	if (E && !E->Source.IsEmpty()) ApplyGossip(Case, State, Sid, E->Source, Ev);
 }
 
 TArray<FLlmMessage> LlmEngine::BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser)
@@ -255,26 +284,26 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 
 	if (!PresentedEvidence.IsEmpty())
 	{
-		if (!St->EvidenceSeen.Contains(PresentedEvidence))
-		{
-			St->EvidenceSeen.Add(PresentedEvidence);
-			ApplyEffects(Case, State, Sid, Def->EvidenceEffects.Find(PresentedEvidence));
-		}
+		SeeEvidence(Case, State, Sid, PresentedEvidence, Ev);
 	}
 	else if (Parsed)
 	{
 		ApplyEffects(Case, State, Sid, Def->TacticEffects.Find(Parsed->Tactic));
 
-		const FString& C = Parsed->ClaimedEvidence;
+		FString C = Parsed->ClaimedEvidence;
+		const FString& G0 = Parsed->RepeatedSuspect;
+		const FLlmEvidence* Claimed = Case.FindEvidence(C);
+		if (!G0.IsEmpty() && G0 != None() && Claimed && !Claimed->Source.IsEmpty() && Claimed->Source != G0)
+		{
+			// The line repeats one suspect but c names another's statement: inconsistent, and treating it as a
+			// claim made a false bluff in the harness. Trust g and drop c.
+			C = None();
+		}
 		if (!C.IsEmpty() && C != None())
 		{
 			if (State.Inventory.Contains(C))
 			{
-				if (!St->EvidenceSeen.Contains(C))
-				{
-					St->EvidenceSeen.Add(C);
-					ApplyEffects(Case, State, Sid, Def->EvidenceEffects.Find(C));
-				}
+				SeeEvidence(Case, State, Sid, C, Ev);
 			}
 			else
 			{
@@ -284,14 +313,9 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 			}
 		}
 
-		const FString& G = Parsed->RepeatedSuspect;
-		const FLlmSuspectDef* Source = Case.FindSuspect(G);
-		if (!G.IsEmpty() && G != None() && G != Sid && Source)
+		if (!Parsed->RepeatedSuspect.IsEmpty() && Parsed->RepeatedSuspect != None())
 		{
-			Ev.Gossip = G;
-			AddMeter(Case, State, G, TEXT("trust"), -Source->GossipPenalty);
-			ApplyEffects(Case, State, Sid, &Def->GossipHeardSelf);
-			ApplyEffects(Case, State, G, &Def->GossipHeardSource);
+			ApplyGossip(Case, State, Sid, Parsed->RepeatedSuspect, Ev);
 		}
 	}
 
@@ -305,10 +329,13 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 			Ev.RevealedText = *Text;
 			if (const FLlmSecret* Sec = Def->FindSecret(Parsed->Secret))
 			{
-				if (!Sec->GrantsEvidence.IsEmpty())
+				for (const FString& G : Sec->GrantsEvidence)
 				{
-					State.Inventory.Add(Sec->GrantsEvidence);
-					Ev.Granted = Sec->GrantsEvidence;
+					if (!State.Inventory.Contains(G))
+					{
+						State.Inventory.Add(G);
+						Ev.Granted.Add(G);
+					}
 				}
 			}
 		}
@@ -342,6 +369,10 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 			St->AfterShutdownSet = R.AfterShutdownSet;
 		}
 		if (R.bEndInterview) St->bClosed = true;
+		for (const FString& O : R.CloseOthers)
+		{
+			if (FLlmSuspectState* Os = State.Suspects.Find(O)) Os->bClosed = true;
+		}
 		for (const FLlmSuspectDef& O : Case.Suspects)
 		{
 			if (O.Id != Sid) ApplyEffects(Case, State, O.Id, &R.Others);
@@ -360,37 +391,54 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 FLlmAccusationResult LlmEngine::Accuse(const FLlmCase& Case, const FLlmCaseState& State, const FString& Accused)
 {
 	const FLlmAccusation& Acc = Case.Accusation;
-	if (Accused != Acc.Culprit) return { false, Acc.WrongText };
-
-	if (const FLlmSuspectState* C = State.Suspects.Find(Acc.Culprit))
-	{
-		for (const FString& S : Acc.ConfessionSecrets)
-		{
-			if (C->Revealed.Contains(S)) return { true, Acc.WinText + TEXT(" (He gave himself away under questioning.)") };
-		}
-	}
-
-	auto AnyHeld = [&](const TArray<FString>& Ids) { return Ids.ContainsByPredicate([&](const FString& Id) { return State.Inventory.Contains(Id); }); };
+	const FLlmSuspectDef* AccusedDef = Case.FindSuspect(Accused);
 	TArray<FString> Missing, Notes;
-	if (!AnyHeld(Acc.MotiveEvidence)) Missing.Add(TEXT("a motive"));
-	if (!AnyHeld(Acc.PhysicalEvidence)) Missing.Add(TEXT("physical evidence placing him at the scene"));
+	FString EndingId;
 
-	bool bWitness = false;
-	for (const FLlmTestimonyReq& W : Acc.Testimony)
+	if (Accused != Acc.Culprit)
 	{
-		const FLlmSuspectState* Ws = State.Suspects.Find(W.Suspect);
-		const FLlmSuspectDef* Wd = Case.FindSuspect(W.Suspect);
-		if (!Ws || !Wd || !Ws->Revealed.Contains(W.Secret)) continue;
-		if (Ws->Meter(TEXT("trust")) >= W.MinTrust) bWitness = true;
-		else Notes.Add(FString::Printf(TEXT("%s takes back their statement: they don't trust you enough to testify."), *Wd->Name));
+		const FString* W = Acc.OnWrong.Find(Accused);
+		EndingId = W ? *W : Acc.OnWrong.FindRef(TEXT("default"));
 	}
-	if (!bWitness) Missing.Add(TEXT("a witness willing to testify he left the table"));
+	else if (const FLlmSuspectState* C = State.Suspects.Find(Accused);
+		C && Acc.ConfessionSecrets.ContainsByPredicate([&](const FString& S) { return C->Revealed.Contains(S); }))
+	{
+		EndingId = Acc.OnConfession;
+	}
+	else
+	{
+		for (const FLlmProof& P : Acc.Proofs)
+		{
+			bool bOk = false;
+			for (const FLlmWitness& W : P.Witnesses)
+			{
+				const FLlmSuspectState* Ws = State.Suspects.Find(W.Suspect);
+				const FLlmSuspectDef* Wd = Case.FindSuspect(W.Suspect);
+				if (!Ws || !Wd || !Ws->Revealed.Contains(W.Secret)) continue;
+				if (Ws->bClosed) Notes.AddUnique(FString::Printf(TEXT("%s has left the club and won't testify."), *Wd->Name));
+				else if (!CondOk(W.When, *Ws)) Notes.AddUnique(W.Recant.IsEmpty() ? FString::Printf(TEXT("%s takes back their statement."), *Wd->Name) : W.Recant);
+				else bOk = true;
+			}
+			if (!bOk) Missing.Add(P.Label);
+		}
+		EndingId = Missing.Num() > 0 ? Acc.OnNoCase : Acc.OnProof;
+	}
 
-	if (Missing.Num() > 0)
+	FLlmAccusationResult R;
+	R.Ending = EndingId;
+	R.bWin = EndingId == Acc.OnConfession || EndingId == Acc.OnProof;
+	if (const FLlmEnding* E = Acc.Endings.Find(EndingId))
 	{
-		return { false, TEXT("Not enough to hold him: missing ") + Join(Missing, TEXT(", ")) + TEXT(". ") + Join(Notes, TEXT(" ")) };
+		R.Title = E->Title;
+		R.Text = E->Text.Replace(TEXT("{name}"), AccusedDef ? *AccusedDef->Name : *Accused).Replace(TEXT("{missing}"), *Join(Missing, TEXT(", ")));
 	}
-	return { true, Acc.WinText };
+	for (const FString& N : Notes) R.Text += TEXT(" ") + N;
+	for (const FLlmEpilogue& Ep : Acc.Epilogues)
+	{
+		const FLlmSuspectState* Es = State.Suspects.Find(Ep.Suspect);
+		if (Es && CondOk(Ep.When, *Es) && (Ep.Endings.Num() == 0 || Ep.Endings.Contains(EndingId))) R.Text += TEXT(" ") + Ep.Text;
+	}
+	return R;
 }
 
 FString LlmEngine::SanitizePlayerLine(const FString& Line, int32 MaxChars)

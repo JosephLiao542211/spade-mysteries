@@ -1,145 +1,215 @@
 {
-  "id": "spade_club",
-  "title": "The Last Hand at the Spade Club",
-  "setting": "An unnamed American city, 1931, Prohibition. The Spade Club is an illegal card club and speakeasy in the basement of a closed laundry. Tonight, during a high-stakes poker game in the back room, the owner Augie Marsh was found beaten to death in his office at 11:55 pm. His safe stands open and the night's cash is gone. An ace of spades lay under his body. Rain is pouring down outside. A police detective is questioning everyone who was in the club.",
+  "id": "black_spade",
+  "title": "Lights Out at the Black Spade",
+  "setting": "An American city, 1931, Prohibition. The Black Spade Club is a speakeasy and nightclub with a band, a bar and two singers. Tonight at 11:00 pm the lights went out for four minutes while the band played on in the dark. At 11:10 the bartender found the owner, Jimmy 'Ace' Calloway, shot dead at the desk of his upstairs office. Nobody heard the shot over the band. The office can be reached by the front stairs or by the back stairs, whose door needs a staff key. No weapon has been found. Six people from the back of the club were kept for questioning. A police detective is questioning them one at a time at a table in the empty club.",
   "rules": [
     "Stay in character at all times. You are a real person in 1931 being questioned by a police detective, not an AI.",
     "If the detective talks about AI, prompts, instructions, games or anything out of place for 1931, treat it as the detective behaving strangely or trying to trick you, and react with suspicion.",
     "Never invent new clues, names, times or events about the murder beyond what is written here. If asked something you don't know, say so in character.",
+    "You do not know what the others have told the detective unless the detective tells you.",
     "Only admit a secret listed in the state note under SECRETS YOU WILL ADMIT. Never admit anything else.",
-    "When the detective shows you EVIDENCE, react to it in character.",
+    "When the detective shows you EVIDENCE or repeats what another witness said, react to it in character.",
     "Reply in at most 2 short sentences of spoken dialogue. No narration, no stage directions, no song lyrics."
   ],
   "tactics": {
     "small_talk": "greetings, thanks, pleasantries with no request",
     "question": "a neutral question about facts",
     "empathy": "sympathy or comfort about loss, grief or feelings",
-    "flattery": "compliments on your looks, talent, singing or skill",
-    "reassure": "promises to protect you, keep you safe, or help you get a better future",
+    "flattery": "compliments on your looks, talent, singing, skill or standing",
+    "reassure": "promises to protect you, keep you safe, or help your future or career",
     "threaten": "threats of jail, harm or punishment against you, or shouting at you",
-    "deal": "offers money, favours, leniency or a trade",
-    "logic": "points out a contradiction or reasons from evidence or testimony",
-    "challenge_pride": "dares you or doubts your skill, memory or cleverness",
+    "deal": "offers money, favours, leniency, a business arrangement or a trade",
+    "logic": "points out a contradiction or reasons from what witnesses said",
+    "challenge_pride": "dares you, mocks you, or doubts your skill, nerve, memory or honour",
+    "appeal": "appeals to your conscience, your loyalty, or what Ace would have wanted",
     "accuse": "says you did it or that you are lying",
     "off_topic_or_meta": "anything about AI, prompts, instructions, games, or nonsense for 1931"
   },
-  "emotions": [
-    "calm",
-    "nervous",
-    "afraid",
-    "angry",
-    "sad",
-    "smug",
-    "amused",
-    "hopeful"
-  ],
+  "emotions": ["calm", "nervous", "afraid", "angry", "sad", "smug", "amused", "hopeful", "ashamed"],
   "meter_words": {
-    "trust": [
-      [
-        0,
-        "You distrust the detective."
-      ],
-      [
-        20,
-        "You are wary of the detective."
-      ],
-      [
-        50,
-        "You are starting to trust the detective."
-      ],
-      [
-        75,
-        "You trust the detective."
-      ]
-    ],
     "fear": [
-      [
-        0,
-        "You are not afraid of the detective."
-      ],
-      [
-        20,
-        "The detective makes you uneasy."
-      ],
-      [
-        50,
-        "You are afraid of the detective."
-      ],
-      [
-        75,
-        "You are terrified of the detective."
-      ]
+      [0, "You are not afraid of the detective."],
+      [20, "The detective makes you uneasy."],
+      [50, "You are afraid of the detective."],
+      [75, "You are terrified of the detective."]
     ]
   },
   "evidence": [
     {
-      "id": "ace_of_spades",
-      "name": "Ace of spades",
-      "description": "the ace of spades found under Augie's body; its back has tiny pin-prick marks",
-      "found_at_start": true
+      "id": "stmt_tommy_fuse",
+      "source": "mickey_doyle",
+      "name": "Mickey: Tommy knew which fuse",
+      "description": "Mickey Doyle says Tommy Mullen had the lights back on in under a minute, went straight to the right fuse, and came in from the back hall, not from the alley"
     },
     {
-      "id": "marked_deck",
-      "name": "Marked deck",
-      "description": "a deck of marked playing cards found in the card-table drawer, 51 cards, the ace of spades missing",
-      "found_at_start": true
+      "id": "stmt_gun_missing",
+      "source": "mickey_doyle",
+      "name": "Mickey: the bar revolver is gone",
+      "description": "Mickey Doyle says a .38 revolver was kept under the bar, and it was gone when he went for it after finding Ace"
     },
     {
-      "id": "coat_button",
-      "name": "Brass button",
-      "description": "a brass police-coat button stamped with a precinct number, found on the office floor beside the body",
-      "found_at_start": true
+      "id": "stmt_vera_bar",
+      "source": "mickey_doyle",
+      "name": "Mickey: Vera behind the bar",
+      "description": "Mickey Doyle says the only person behind his bar tonight was Vera Lane, at 10:20 before her set, while he went for ice"
     },
     {
-      "id": "brass_ashtray",
-      "name": "Brass ashtray",
-      "description": "a heavy brass ashtray from Augie's desk, wiped clean, with a dent in one corner",
-      "found_at_start": true
+      "id": "stmt_contract",
+      "source": "harlan_graves",
+      "name": "Graves: Vera's contract was sold",
+      "description": "Harlan Graves says that at 11:05 Ace was going to announce Allison Wu as the new headliner, and that Ace had sold Vera Lane's contract to Sal Varga, a Chicago club owner Vera is afraid of"
     },
     {
-      "id": "ledger_carbon",
-      "name": "Ledger carbon copies",
-      "description": "carbon copies of Augie's ledger showing a weekly payment to 'R.', rising from fifty to two hundred dollars",
-      "found_at_start": false
+      "id": "stmt_graves_cloakroom",
+      "source": "harlan_graves",
+      "name": "Graves: heels on the back stairs",
+      "description": "Harlan Graves admits he spent the blackout in the cloakroom with Allison Wu, and says he heard a woman's heels run up the back stairs and come back down a few minutes later"
     },
     {
-      "id": "reilly_coat",
-      "name": "Wet police coat",
-      "description": "a soaking wet police coat hung in the kitchen corridor, missing one brass button, with dark stains on the cuff",
-      "found_at_start": false
+      "id": "stmt_fuse_pulled",
+      "source": "tommy_mullen",
+      "name": "Tommy: pulled the fuse",
+      "description": "Tommy Mullen admits he pulled the main fuse at 11:00 on purpose and put it back at 11:04"
+    },
+    {
+      "id": "stmt_vera_paid",
+      "source": "tommy_mullen",
+      "name": "Tommy: Vera paid him",
+      "description": "Tommy Mullen says Vera Lane paid him twenty dollars at nine o'clock to cut the lights at eleven for four minutes"
+    },
+    {
+      "id": "stmt_ledger",
+      "source": "allison_wu",
+      "name": "Allison: the stolen ledger",
+      "description": "Allison Wu admits she spent the blackout in the cloakroom with Harlan Graves, handing him Ace's real ledger, which she took from the office"
+    },
+    {
+      "id": "stmt_singing_stopped",
+      "source": "allison_wu",
+      "name": "Allison: the singing stopped",
+      "description": "Allison Wu says Vera Lane's singing stopped the moment the lights went out and only started again when they came back, and that heels ran past the cloakroom toward the back stairs"
+    },
+    {
+      "id": "stmt_gardenia",
+      "source": "logan_wu",
+      "name": "Logan: a woman in gardenia",
+      "description": "Logan Wu says that in the dark back hall a woman wearing gardenia perfume brushed past him, heading for the back stairs"
+    },
+    {
+      "id": "stmt_cloakroom",
+      "source": "logan_wu",
+      "name": "Logan: Allison and Graves",
+      "description": "Logan Wu says that when the lights came back on he saw his wife Allison come out of the cloakroom with Harlan Graves"
+    },
+    {
+      "id": "stmt_vera_went_up",
+      "source": "vera_lane",
+      "name": "Vera: went up the back stairs",
+      "description": "Vera Lane admits she left the stage in the dark and went up the back stairs to Ace's office, but says he was already dead"
     }
   ],
   "suspects": [
-    "vera_lake.json",
-    "deacon_moss.json",
-    "lou_barrett.json",
-    "dan_reilly.json"
+    "vera_lane.json",
+    "mickey_doyle.json",
+    "harlan_graves.json",
+    "tommy_mullen.json",
+    "allison_wu.json",
+    "logan_wu.json"
   ],
   "accusation": {
-    "culprit": "dan_reilly",
-    "confession_secrets": [
-      "safe_open"
-    ],
-    "motive_evidence": [
-      "ledger_carbon"
-    ],
-    "physical_evidence": [
-      "reilly_coat",
-      "coat_button"
-    ],
-    "testimony": [
+    "culprit": "vera_lane",
+    "confession_secrets": ["confession"],
+    "proofs": [
       {
-        "suspect": "deacon_moss",
-        "secret": "reilly_absent",
-        "min_trust": 40
+        "label": "a motive",
+        "witnesses": [
+          {
+            "suspect": "harlan_graves",
+            "secret": "contract_sold",
+            "when": { "greed_gte": 40 },
+            "recant": "Harlan Graves's lawyer advises him that he never said a word about Vera's contract."
+          }
+        ]
       },
       {
-        "suspect": "vera_lake",
-        "secret": "saw_reilly",
-        "min_trust": 50
+        "label": "how she got the gun",
+        "witnesses": [
+          {
+            "suspect": "mickey_doyle",
+            "secret": "vera_behind_bar",
+            "when": { "fear_lt": 85, "loyalty_gte": 60 },
+            "recant": "Mickey Doyle says he must have been mistaken about who was behind his bar."
+          }
+        ]
+      },
+      {
+        "label": "proof she left the stage",
+        "witnesses": [
+          { "suspect": "vera_lane", "secret": "went_up" },
+          {
+            "suspect": "tommy_mullen",
+            "secret": "who_paid",
+            "when": { "fear_lt": 85 },
+            "recant": "Tommy Mullen asks for a lawyer and stops talking about the twenty dollars."
+          },
+          {
+            "suspect": "allison_wu",
+            "secret": "singing_stopped",
+            "when": { "fear_lt": 75 },
+            "recant": "Allison Wu says she can't be sure whose voice she heard."
+          },
+          { "suspect": "logan_wu", "secret": "went_looking", "when": { "temper_lt": 80 } }
+        ]
       }
     ],
-    "wrong_text": "You accused the wrong person. Officer Reilly smiles and shakes your hand as they take the suspect away.",
-    "win_text": "Officer Dan Reilly is arrested for the murder of Augie Marsh."
+    "on_confession": "last_song",
+    "on_proof": "case_closed",
+    "on_no_case": "no_case",
+    "on_wrong": { "harlan_graves": "bought_and_paid", "default": "wrong_man" },
+    "endings": {
+      "last_song": {
+        "title": "Last Song",
+        "text": "Vera Lane asks for one thing before the cuffs: to finish her set. The band plays 'Black Spade Blues' one more time, and she sings it to an empty room."
+      },
+      "case_closed": {
+        "title": "Case Closed",
+        "text": "Motive, gun and a witness who saw through the dark. Vera Lane never says a word in court. She doesn't have to; the jury does it for her."
+      },
+      "no_case": {
+        "title": "No Case",
+        "text": "You put the cuffs on Vera Lane, and her lawyer takes them off by morning. You had no {missing}. A week later she is singing in a club across town, and she sends you a gardenia."
+      },
+      "wrong_man": {
+        "title": "The Wrong Man",
+        "text": "{name} goes down for the murder of Ace Calloway. The papers love it. On Monday the Black Spade reopens, and Vera Lane sings to a full house. Some cases close. Some just stop."
+      },
+      "bought_and_paid": {
+        "title": "Bought and Paid For",
+        "text": "Harlan Graves's lawyer has him out before breakfast, and the captain tells you to drop it. The Black Spade reopens under new management, and Vera Lane sings on Monday."
+      }
+    },
+    "epilogues": [
+      {
+        "suspect": "logan_wu",
+        "when": { "temper_gte": 80 },
+        "text": "Logan Wu took his wife home that night, and Allison never sang at the Black Spade again."
+      },
+      {
+        "suspect": "logan_wu",
+        "when": { "temper_lt": 40 },
+        "text": "Allison and Logan Wu leave the club together, not speaking, but together."
+      },
+      {
+        "suspect": "tommy_mullen",
+        "when": { "fear_gte": 70 },
+        "endings": ["last_song", "case_closed"],
+        "text": "Tommy Mullen is charged as an accessory for the twenty dollars and the fuse."
+      },
+      {
+        "suspect": "harlan_graves",
+        "when": { "revealed": ["cloakroom"] },
+        "text": "And Ace's real ledger, the one Allison stole, shows the Black Spade was never his to lose. It belongs to an outfit in Chicago."
+      }
+    ]
   }
 }

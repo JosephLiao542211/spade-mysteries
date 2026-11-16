@@ -44,13 +44,14 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
 	int32 GpuLayers = 99;
 
-	/** Total context; split evenly across ParallelSlots (one slot per suspect). 4 x 4096: with the Spade Club
-	 *  prompt (~860 static tokens), 2048 per slot overflowed after ~11 turns. Costs only ~70 MB more on E4B. */
+	/** Total context; split evenly across ParallelSlots (one slot per suspect). 6 x 4096 for the six Black Spade
+	 *  suspects: 2048 per slot overflowed after ~11 turns with the earlier 4-suspect prompt. */
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
-	int32 ContextSize = 16384;
+	int32 ContextSize = 24576;
 
+	/** Must be at least the number of suspects in the case (each suspect's "slot" in its JSON). */
 	UPROPERTY(Config, EditAnywhere, Category = "Server")
-	int32 ParallelSlots = 4;
+	int32 ParallelSlots = 6;
 
 	/** Seconds to wait for /health before falling back to CPU, then failing. */
 	UPROPERTY(Config, EditAnywhere, Category = "Server")

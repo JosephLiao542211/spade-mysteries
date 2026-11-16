@@ -1,8 +1,9 @@
 # Local LLM Implementation Plan
 
 How the suspects' dialogue will run on a local model inside Spade Mystery (UE 5.8).
-Status: Day-1 spike done for the model side (§13). Trust/fear meter system and the Spade Club case built and
-benchmarked (§14, case file in `docs/cases/spade-club.md`). Unreal code written but not yet compiled.
+Status: Day-1 spike done for the model side (§13). Meter system built (§14). The case is now **Lights Out at
+the Black Spade**: six suspects, fear + one personality bar each, interrogation only, statements as evidence
+(§15, case file in `docs/cases/spade-club.md`). Unreal code written but not yet compiled.
 Researched 2026-11-13.
 
 ## 1. Where the repo stands
@@ -42,7 +43,7 @@ llama-server.exe -m Models/gemma-4-E4B-it-Q4_K_M.gguf
   --host 127.0.0.1 --port <free port>
   -ngl 99 -fa on
   -ctk q8_0 -ctv q8_0            # quantized KV cache: about half the memory, needs flash attention
-  -c 16384 --parallel 4          # 4 slots x 4096 tokens, one per suspect (2048 overflowed after ~11 turns, §14)
+  -c 24576 --parallel 6          # 6 slots x 4096 tokens, one per suspect (2048 overflowed after ~11 turns, §14)
   -t <physical cores - 2>        # leave CPU for the game thread
   --jinja --no-webui
   --reasoning off --reasoning-budget 0   # required: see §4
@@ -88,11 +89,11 @@ hasn't made available:
   "type": "object",
   "properties": {
     "t": { "enum": ["small_talk","question","empathy","flattery","reassure","threaten","deal",
-                    "logic","challenge_pride","accuse","off_topic_or_meta"] }, // detective's tactic
-    "c": { "enum": ["ace_of_spades", "...", "none"] },   // evidence the detective claims to HAVE (bluff check)
-    "g": { "enum": ["deacon_moss", "...", "none"] },     // whose words the detective is repeating (gossip)
-    "f": { "enum": ["none", "augie_scared"] },           // secret admitted now: only currently UNLOCKED ones
-    "e": { "enum": ["calm","nervous","afraid","angry","sad","smug","amused","hopeful"] },
+                    "logic","challenge_pride","appeal","accuse","off_topic_or_meta"] }, // detective's tactic
+    "c": { "enum": ["stmt_vera_paid", "...", "none"] },  // statement the detective claims to HAVE (bluff check)
+    "g": { "enum": ["mickey_doyle", "...", "none"] },    // whose words the detective is repeating (gossip)
+    "f": { "enum": ["none", "went_up"] },                // secret admitted now: only currently UNLOCKED ones
+    "e": { "enum": ["calm","nervous","afraid","angry","sad","smug","amused","hopeful","ashamed"] },
     "r": { "type": "string", "maxLength": 300 }          // spoken reply
   },
   "required": ["t","c","g","f","e","r"]
@@ -102,7 +103,8 @@ hasn't made available:
 - Keys are one letter because every output token costs time on weak machines (§7.4).
 - **The model only classifies; code owns every meter.** `t` drives that suspect's tactic effects; `c` is
   compared with the player's inventory (held → evidence effects, not held → **bluff**); `g` applies gossip
-  costs to the quoted suspect. See §14 and `docs/cases/spade-club.md`.
+  costs to the quoted suspect. If `g` names one suspect and `c` another suspect's statement, `c` is dropped
+  (it was producing false bluffs, §15). See §14–15 and `docs/cases/spade-club.md`.
 - **Field order:** classification first; then `f`, the decision to admit; then `r`, which carries it.
   With `f` after `r`, E4B never admitted anything (§14); with `f` before `r` and a **topic** per secret,
   it admitted on the first matching question. `r` still comes last, so streaming can start the typewriter
@@ -148,9 +150,12 @@ the last 8 in one go and fold the dropped part into the summary. The cache break
 which facts were admitted, so it writes "The detective has shown you X. You have admitted Y." Deterministic,
 free, no extra model call.
 
-**Evidence presentation** is a game event. Code applies that suspect's effects for the item (once per
-suspect), then sends a narration message so the suspect reacts, for example:
-`[EVIDENCE] The detective places this on the table: a brass police-coat button stamped with a precinct number...`
+**Evidence presentation** is a game event. In the Black Spade case all evidence is **statements**: a secret
+grants a notebook entry, and "presenting" it repeats that witness's words to someone else. Code applies that
+suspect's effects for it (once per suspect) plus the gossip effects for its source, then sends a narration
+message so the suspect reacts, for example:
+`[EVIDENCE] The detective tells you what another witness said: Tommy Mullen says Vera Lane paid him twenty dollars...`
+Physical items still work (`[EVIDENCE] The detective places this on the table: ...`) for later cases.
 
 **Input hygiene:** cap player text (about 300 chars), strip chat-template tokens (`<start_of_turn>`, `<|im_start|>` and similar).
 
@@ -208,7 +213,7 @@ allow overriding it in the options menu.
 - **Per-layer embeddings already stay in system RAM:** E2B (3.1 GB file) uses only ~1.6 GB of video memory
   with `-ngl 99`, and adding `--override-tensor per_layer_token_embd=CPU` changed nothing. No flag needed.
 - Quantized KV cache (`-ctk q8_0 -ctv q8_0`) and a context sized to the measured need (start at
-  4 × 4096 tokens; 4 × 2048 overflowed with the Spade Club prompt, §14).
+  6 × 4096 tokens for six suspects; 4 × 2048 overflowed with the earlier prompt, §14).
 
 ### 7.4 Fewer tokens, and hide the wait
 
@@ -222,8 +227,10 @@ allow overriding it in the options menu.
 
 - Short static prefix (≤ 600 tokens), pre-loaded per suspect during the loading screen (§3).
 - Append-only history with the state note last, trimmed in big steps (§5).
-- More than 4 suspects: use `/slots/{id}?action=save|restore` (needs `--slot-save-path`) to swap
-  caches, or accept a slower first reply after switching suspects.
+- The Black Spade has 6 suspects, so 6 slots (24,576 tokens of context in total). Beyond that, use
+  `/slots/{id}?action=save|restore` (needs `--slot-save-path`) to swap caches, or accept a slower first
+  reply after switching suspects. The static prompt is now ~1,150 tokens (12 statement ids, 12 tactics), so the
+  "≤ 600" target is missed; on the CPU tier that is ~13 s per suspect at load time, inside the loading screen.
 
 ### 7.6 Voice on low tiers
 
@@ -295,9 +302,9 @@ without opening the editor.
 8. Suspect pre-loading during the loading screen; frame-rate cap during interrogations.
 
 **Days 3–5: interrogation loop**
-9. ~~Case data, trust/fear/personal meters, secret keys, per-suspect slots, append-only history~~ (done, §14).
-10. ~~Evidence presentation, bluffs, gossip~~ (done in engine and debug window, §14).
-11. Accusation flow (rules done, §14) and the ending scene.
+9. ~~Case data, fear/personality meters, secret keys, per-suspect slots, append-only history~~ (done, §14–15).
+10. ~~Statements as evidence, bluffs, gossip~~ (done in engine and debug window, §15).
+11. Accusation flow and endings (rules and ending texts done, §15); the ending scene itself.
 12. Real interrogation UI: suspect portraits whose expression follows `e`, "how your line was read" feedback,
     clue cards, evidence table.
 
@@ -309,7 +316,7 @@ without opening the editor.
 - Is dropping hardware ray tracing / Maximum preset acceptable for the art direction?
 - Ship both E4B and E2B in the download, or fetch only the tier's model on first launch?
 - Which real weak PC (laptop?) can we test on before submission?
-- How many suspects per case (affects slot count / context size).
+- ~~How many suspects per case~~: six for the Black Spade (6 slots).
 - Is voice in scope for the submission, or only a stretch goal?
 - Who writes the case and character sheets, and in what format they hand them over.
 
@@ -391,6 +398,60 @@ reply ~78 tokens.
    for the CPU tier.
 6. **An invalid reply must change nothing**: no history entry (the model would see broken JSON as its own words),
    no meter changes. The player just tries again.
+
+## 15. The Black Spade rewrite (2026-11-15)
+
+The case was rewritten around the six suspects on the `noir-interrogation` branch (Vera Lane, Mickey Doyle,
+Harlan Graves, Tommy Mullen, Allison Wu, Logan Wu). There is no room to search: every clue is a **statement**
+that one suspect gives up and the player repeats to the others. Each suspect shows two bars: **Fear** and one
+**personality bar** (Composure, Loyalty, Greed, Bravado, Ambition, Temper). Story and numbers:
+`docs/cases/spade-club.md`.
+
+Engine changes, mirrored in `engine.py` and `LlmEngine.cpp`:
+- Trust is no longer built in. `dampen` (scale a meter's gains while a condition holds) replaces
+  "fear halves trust gains"; `gossip_cost` (effects on the quoted suspect) replaces the trust-only gossip penalty.
+- Evidence items can have a `source`. Presenting a suspect's statement to someone else counts as repeating
+  their words. A secret can grant several statements (`grants_evidence` is a list).
+- Trigger rules can close other suspects' interviews (`close_others`: Logan walks out and takes Allison).
+- Accusation is data-driven: `proofs` (each needs one witness who revealed the secret, is still in the club
+  and still meets a condition, otherwise they recant), named `endings` with `{name}` / `{missing}`, and
+  `epilogues` added by meter conditions. `Accuse` now returns the ending id and title too.
+- `c` is dropped when it names a statement from a different suspect than `g`.
+
+Engine tests: 41/41 pass. 8 scripted interrogations (`scripts/spade_club.json`), secrets revealed per script:
+
+| Script | What it tests | E4B GPU | E2B GPU | E2B CPU (4 threads) |
+|---|---|---|---|---|
+| vera_crack | three statements break her composure: false story, then confession | 2/2, **Last Song** | 2/2, Last Song | 2/2, Last Song |
+| vera_bluff | flattery and a bluffed statement steady her | 0/0, bluff caught | 0/0, bluff caught | 0/0, **bluff missed** |
+| mickey_loyal | calm + appeals to Ace; names Vera only after hearing a statement against her | 3/3 | 2/3 | 3/3 |
+| mickey_scared | threats panic him into a shutdown | 0/0 | 0/0 (+tommy_fuse via fear) | 0/0 (+tommy_fuse via fear) |
+| graves_greed | threats bore him; deal for the motive; Logan's statement for the cloakroom; bluff | 2/2, bluff caught | 2/2, **bluff missed** | 2/2, **bluff missed** |
+| tommy_brag_then_break | bragging gives the fuse; Mickey's statement + logic give the name | 2/2 | 1/2 | 1/2 |
+| allison_ambition | career promises and calm | 2/2 | 2/2 | 2/2 |
+| logan_temper | quoting Vera scares him into talking; the ledger statement makes him walk out with Allison | 1/1, walks out | 1/1 (+ace_debt), walks out | 1/1 (+ace_debt), walks out |
+| **Secrets / valid JSON** | | **14/14, 48/48** | 12/14, 48/48 | 13/14, 48/48 |
+| **Tactics read correctly** | | **35/41 (85%)** | 30/41 (73%) | 28/41 (68%) |
+| **Time per reply** | | 0.9 s | 0.7 s | 5.0 s (max 7.9 s) |
+| **Video memory** | | 3.38 GB | 1.70 GB | 0 |
+
+Static prompt ~1,150 tokens per suspect; ~250 tokens read per turn; replies ~85 tokens. E4B with 6 slots uses
++110 MB over 4 slots. E2B on 4 CPU threads is ~5 s per reply, up from ~4.3 s with the old, shorter prompt.
+The extra reveals marked "+" are legitimate routes (Mickey's fear route; Logan's debt), not leaks. E2B still
+misses more labels, which on this case shows up as missed bluffs and Tommy's name not coming out.
+
+**What we learned**
+1. **Overlapping tactic definitions cost reveals.** "I'll put in a good word with the new owners" is a fair
+   `reassure` (career help) as much as a `deal`; Allison's ambition only rose on `deal`. Personality effects
+   now cover both readings.
+2. **Bluffs have teeth.** Caught bluffing early, Graves lost enough greed and fear that the later reveals fell
+   short. That is the design, but scripts that test reveals keep their bluffs at the end.
+3. **Vague bluffs are invisible.** "Allison told me everything" is classified as gossip, not as a claimed
+   statement, so it can't be checked against the notebook. Only specific claims are caught.
+4. **The model links names, not sources.** "Vera says she saw you..." came back as c = Mickey's statement
+   *about* Vera, a false bluff. Fixed in code (drop `c` when its source differs from `g`).
+5. Lines the model still misreads: "Which is it?" as a dare instead of logic, "that makes you part of a murder"
+   as an accusation. The data now tolerates both, and the UI still has to show how each line was read.
 
 ## Sources
 
