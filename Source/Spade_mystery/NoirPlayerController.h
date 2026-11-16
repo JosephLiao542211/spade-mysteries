@@ -133,5 +133,5 @@ private:
 	void HandleReply(const FInterrogationReply& Reply);
 	void HandleServerState(ELlmServerState NewState);
 
-	double TalkOpened = 0.0;
+	FKey TalkOpener;
 };

@@ -1,5 +1,6 @@
 #include "Llm/LlmDebugChatSubsystem.h"
 
+#include "Engine/GameInstance.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Llm/InterrogationSession.h"
@@ -64,6 +65,7 @@ void ULlmDebugChatSubsystem::OpenWindow()
 		Window->BringToFront();
 		return;
 	}
+	Session->PreloadAll();
 
 	TWeakObjectPtr<ULlmDebugChatSubsystem> WeakThis(this);
 	TSharedRef<SHorizontalBox> SuspectRow = SNew(SHorizontalBox);
@@ -198,7 +200,7 @@ void ULlmDebugChatSubsystem::OnReply(const FInterrogationReply& Reply)
 
 void ULlmDebugChatSubsystem::OnServerState(ELlmServerState State)
 {
-	if (State == ELlmServerState::Ready) Session->PreloadAll();
+	if (State == ELlmServerState::Ready && Window.IsValid()) Session->PreloadAll();
 	RefreshStatus();
 }
 

@@ -142,6 +142,15 @@ void ULlmServerSubsystem::StopServer()
 
 bool ULlmServerSubsystem::TickHealth(float DeltaTime)
 {
+	if (State == ELlmServerState::Ready && Proc.IsValid())
+	{
+		if (FPlatformProcess::IsProcRunning(Proc)) return true;
+		HealthTicker.Reset();
+		LastError = TEXT("llama-server stopped. Restart the game to reload it.");
+		StopServer();
+		SetState(ELlmServerState::Failed);
+		return false;
+	}
 	if (State != ELlmServerState::Starting)
 	{
 		HealthTicker.Reset();

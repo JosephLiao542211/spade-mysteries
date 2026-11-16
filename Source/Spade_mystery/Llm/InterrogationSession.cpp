@@ -25,11 +25,22 @@ bool UInterrogationSession::Init(ULlmServerSubsystem* InServer, const FString& C
 
 void UInterrogationSession::PreloadAll()
 {
-	if (!Server.IsValid() || !Server->IsReady()) return;
+	if (!Server.IsValid() || !Server->IsReady() || IsPreloading()) return;
+	PreloadError.Reset();
+	PendingPreloads = Case.Suspects.Num();
+	TWeakObjectPtr<UInterrogationSession> WeakThis(this);
 	for (const FLlmSuspectDef& S : Case.Suspects)
 	{
 		const TArray<FLlmMessage> Msgs = { { TEXT("system"), LlmEngine::StaticSystem(Case, S.Id) }, { TEXT("user"), TEXT("[DETECTIVE] ...") } };
-		PostChat(S.Slot, Msgs, LlmEngine::Schema(Case, State, S.Id), 1, [](bool, const TSharedPtr<FJsonObject>&, const FString&) {});
+		PostChat(S.Slot, Msgs, LlmEngine::Schema(Case, State, S.Id), 1,
+			[WeakThis](bool bOk, const TSharedPtr<FJsonObject>&, const FString& Error)
+			{
+				if (UInterrogationSession* Self = WeakThis.Get())
+				{
+					--Self->PendingPreloads;
+					if (!bOk && Self->PreloadError.IsEmpty()) Self->PreloadError = Error;
+				}
+			});
 	}
 }
 
@@ -135,8 +146,11 @@ void UInterrogationSession::PostChat(int32 Slot, const TArray<FLlmMessage>& Mess
 	Req->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	Req->SetContentAsString(BodyStr);
 	Req->SetTimeout(120.f); // CPU-only machines can be slow on a cold prefix
-	Req->OnProcessRequestComplete().BindLambda([Done](FHttpRequestPtr, FHttpResponsePtr Resp, bool bConnected)
+	const TSharedRef<bool> Delivered = MakeShared<bool>(false);
+	Req->OnProcessRequestComplete().BindLambda([Done, Delivered](FHttpRequestPtr, FHttpResponsePtr Resp, bool bConnected)
 	{
+		if (*Delivered) return;
+		*Delivered = true;
 		if (!bConnected || !Resp.IsValid())
 		{
 			Done(false, nullptr, TEXT("No connection to llama-server"));
@@ -151,7 +165,11 @@ void UInterrogationSession::PostChat(int32 Slot, const TArray<FLlmMessage>& Mess
 		}
 		Done(true, Json, FString());
 	});
-	Req->ProcessRequest();
+	if (!Req->ProcessRequest() && !*Delivered)
+	{
+		*Delivered = true;
+		Done(false, nullptr, TEXT("Could not send the request to llama-server"));
+	}
 }
 
 void UInterrogationSession::HandleReply(const FString& SuspectId, const FString& UserMsg, const FString& PresentedEvidence,
@@ -163,6 +181,17 @@ void UInterrogationSession::HandleReply(const FString& SuspectId, const FString&
 	Out.SuspectId = SuspectId;
 	Out.bEvidenceEvent = !PresentedEvidence.IsEmpty();
 	Out.Seconds = static_cast<float>(FPlatformTime::Seconds() - StartTime);
+
+	// Logan can close Allison's interview while her last request is still in flight.
+	if (const FLlmSuspectState* St = State.Suspects.Find(SuspectId); St && St->bClosed)
+	{
+		Out.bOk = true;
+		Out.bInterviewClosed = true;
+		Out.Reply = TEXT("The witness has left the club.");
+		Out.Meters = St->Meters;
+		OnReply.Broadcast(Out);
+		return;
+	}
 
 	FString Content;
 	if (bOk)

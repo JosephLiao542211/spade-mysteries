@@ -73,21 +73,21 @@ namespace
 				M.Add(Letters[i], Pair);
 			}
 			M.Add(EKeys::One, TEXT("1!"));
-			M.Add(EKeys::Two, TEXT("22"));
-			M.Add(EKeys::Three, TEXT("33"));
+			M.Add(EKeys::Two, TEXT("2@"));
+			M.Add(EKeys::Three, TEXT("3#"));
 			M.Add(EKeys::Four, TEXT("4$"));
-			M.Add(EKeys::Five, TEXT("55"));
-			M.Add(EKeys::Six, TEXT("66"));
-			M.Add(EKeys::Seven, TEXT("77"));
-			M.Add(EKeys::Eight, TEXT("88"));
+			M.Add(EKeys::Five, TEXT("5%"));
+			M.Add(EKeys::Six, TEXT("6^"));
+			M.Add(EKeys::Seven, TEXT("7&"));
+			M.Add(EKeys::Eight, TEXT("8*"));
 			M.Add(EKeys::Nine, TEXT("9("));
 			M.Add(EKeys::Zero, TEXT("0)"));
 			M.Add(EKeys::SpaceBar, TEXT("  "));
-			M.Add(EKeys::Period, TEXT(".."));
-			M.Add(EKeys::Comma, TEXT(",,"));
+			M.Add(EKeys::Period, TEXT(".>"));
+			M.Add(EKeys::Comma, TEXT(",<"));
 			M.Add(EKeys::Slash, TEXT("/?"));
 			M.Add(EKeys::Apostrophe, TEXT("'\""));
-			M.Add(EKeys::Hyphen, TEXT("--"));
+			M.Add(EKeys::Hyphen, TEXT("-_"));
 			M.Add(EKeys::Semicolon, TEXT(";:"));
 			return M;
 		}();
@@ -143,9 +143,12 @@ FString ANoirPlayerController::GetServerStatus() const
 	}
 	switch (Server->GetState())
 	{
-	case ELlmServerState::Ready:    return FString();
+	case ELlmServerState::Ready:
+		if (Session && !Session->GetPreloadError().IsEmpty()) return TEXT("Interview preparation failed: ") + Session->GetPreloadError();
+		if (Session && Session->IsPreloading()) return TEXT("Preparing the six interviews...");
+		return FString();
 	case ELlmServerState::Starting: return TEXT("The suspects are being brought in... (loading the language model)");
-	case ELlmServerState::Failed:   return TEXT("The language model did not start: ") + Server->GetLastError();
+	case ELlmServerState::Failed:   return TEXT("The language model is unavailable: ") + Server->GetLastError();
 	default:                        return TEXT("The language model is not running: the suspects cannot answer.");
 	}
 }
@@ -242,6 +245,7 @@ void ANoirPlayerController::SetupInputComponent()
 	TArray<FKey> Keys;
 	CharKeys().GetKeys(Keys);
 	Keys.Add(EKeys::Enter);
+	Keys.Add(EKeys::Escape);
 	Keys.Add(EKeys::BackSpace);
 	Keys.Add(EKeys::Tab);
 	Keys.Add(EKeys::Up);
@@ -269,24 +273,15 @@ void ANoirPlayerController::OnClick()
 
 void ANoirPlayerController::HandleKey(FKey Key, bool bRepeat)
 {
-	const double Now = GetWorld()->GetRealTimeSeconds();
-
 	// Talking: the keyboard types the detective's line.
 	if (State == ENoirState::Interrogate && bTalking && !bNotebook)
 	{
-		if (Key == EKeys::BackSpace)
+		if (Key == TalkOpener)
 		{
-			if (!Input.IsEmpty())
-			{
-				Input = Input.LeftChop(1);
-			}
-			return;
+			if (bRepeat) return;
+			TalkOpener = FKey(); // A new press of the same letter should type immediately.
 		}
-		if (bRepeat && Now - TalkOpened < 0.75)
-		{
-			return; // the key that opened the panel is still held down
-		}
-		if (Key == EKeys::Enter || Key == EKeys::Tab || Key == EKeys::Down || Key == EKeys::Up || Key == EKeys::Left || Key == EKeys::Right)
+		if (Key == EKeys::Enter || Key == EKeys::Tab || Key == EKeys::Escape || Key == EKeys::Down || Key == EKeys::Up || Key == EKeys::Left || Key == EKeys::Right)
 		{
 			if (bRepeat)
 			{
@@ -294,9 +289,15 @@ void ANoirPlayerController::HandleKey(FKey Key, bool bRepeat)
 			}
 			if (Key == EKeys::Enter)      Submit();
 			else if (Key == EKeys::Tab)   DoAction(ENoirAction::Notebook);
-			else if (Key == EKeys::Down)  DoAction(ENoirAction::Talk);
+			else if (Key == EKeys::Down || Key == EKeys::Escape) DoAction(ENoirAction::Talk);
 			else if (Key == EKeys::Left)  DoAction(ENoirAction::Prev);
 			else if (Key == EKeys::Right) DoAction(ENoirAction::Next);
+			return;
+		}
+		if (HasLeft(Current) || !GetServerStatus().IsEmpty()) return;
+		if (Key == EKeys::BackSpace)
+		{
+			if (!Input.IsEmpty()) Input = Input.LeftChop(1);
 			return;
 		}
 		if (const FString* Pair = CharKeys().Find(Key))
@@ -322,10 +323,12 @@ void ANoirPlayerController::HandleKey(FKey Key, bool bRepeat)
 		if (Entry != INDEX_NONE)
 		{
 			PresentEntry(Entry);
+			TalkOpener = Key;
 		}
-		else if (Key == EKeys::Tab || Key == EKeys::N || Key == EKeys::Down)
+		else if (Key == EKeys::Tab || Key == EKeys::N || Key == EKeys::Down || Key == EKeys::Escape)
 		{
 			DoAction(ENoirAction::Notebook);
+			TalkOpener = Key;
 		}
 		else if (Key == EKeys::Left || Key == EKeys::A)
 		{
@@ -339,7 +342,11 @@ void ANoirPlayerController::HandleKey(FKey Key, bool bRepeat)
 	}
 
 	if (Key == EKeys::SpaceBar || Key == EKeys::Enter) DoAction(ENoirAction::Begin);
-	else if (Key == EKeys::T || Key == EKeys::Up)      DoAction(ENoirAction::Talk);
+	else if (Key == EKeys::T || Key == EKeys::Up)
+	{
+		DoAction(ENoirAction::Talk);
+		TalkOpener = Key;
+	}
 	else if (Key == EKeys::Right || Key == EKeys::D)   DoAction(ENoirAction::Next);
 	else if (Key == EKeys::Left || Key == EKeys::A)    DoAction(ENoirAction::Prev);
 	else if (Key == EKeys::X)                          DoAction(ENoirAction::Accuse);
@@ -357,7 +364,7 @@ void ANoirPlayerController::DoAction(ENoirAction Action)
 	case ENoirAction::None:
 		break;
 	case ENoirAction::Begin:
-		if (State == ENoirState::Briefing && Suspects.Num() > 0)
+		if (State == ENoirState::Briefing && Suspects.Num() > 0 && GetServerStatus().IsEmpty())
 		{
 			State = ENoirState::Interrogate;
 		}
@@ -367,7 +374,7 @@ void ANoirPlayerController::DoAction(ENoirAction Action)
 		{
 			bTalking = !bTalking;
 			bNotebook = false;
-			TalkOpened = GetWorld()->GetRealTimeSeconds();
+			TalkOpener = FKey();
 			Greet();
 		}
 		break;
@@ -377,7 +384,6 @@ void ANoirPlayerController::DoAction(ENoirAction Action)
 		if (State == ENoirState::Interrogate)
 		{
 			bNotebook = !bNotebook;
-			TalkOpened = GetWorld()->GetRealTimeSeconds();
 		}
 		break;
 	case ENoirAction::Mood:
@@ -450,7 +456,7 @@ void ANoirPlayerController::Greet()
 		return;
 	}
 	FNoirSuspect& S = Suspects[Current];
-	if (bTalking && S.Log.IsEmpty() && !S.Greeting.IsEmpty())
+	if (bTalking && !HasLeft(Current) && S.Log.IsEmpty() && !S.Greeting.IsEmpty())
 	{
 		FNoirLine Line;
 		Line.Kind = ENoirLineKind::Suspect;
@@ -463,7 +469,7 @@ void ANoirPlayerController::Greet()
 void ANoirPlayerController::Submit()
 {
 	const FString Said = Input.TrimStartAndEnd();
-	if (Said.IsEmpty() || !Session || !Suspects.IsValidIndex(Current))
+	if (Said.IsEmpty() || !Session || !Suspects.IsValidIndex(Current) || HasLeft(Current))
 	{
 		return;
 	}
@@ -497,7 +503,7 @@ void ANoirPlayerController::Submit()
 void ANoirPlayerController::PresentEntry(int32 Index)
 {
 	const TArray<FString> Ids = NotebookIds();
-	if (State != ENoirState::Interrogate || !Session || !Ids.IsValidIndex(Index) || !Suspects.IsValidIndex(Current))
+	if (State != ENoirState::Interrogate || !Session || !Ids.IsValidIndex(Index) || !Suspects.IsValidIndex(Current) || HasLeft(Current))
 	{
 		return;
 	}
@@ -513,7 +519,7 @@ void ANoirPlayerController::PresentEntry(int32 Index)
 	if (!bTalking)
 	{
 		bTalking = true;
-		TalkOpened = Now;
+		TalkOpener = FKey();
 		Greet();
 	}
 
@@ -588,6 +594,10 @@ void ANoirPlayerController::HandleReply(const FInterrogationReply& Reply)
 	{
 		AddNote(S, TEXT("CLUE: ") + Reply.RevealedText, After);
 	}
+	for (const FString& Note : Reply.TriggeredNotes)
+	{
+		AddNote(S, Note, After);
+	}
 	for (const FString& Granted : Reply.GrantedEvidenceIds)
 	{
 		AddNote(S, TEXT("NOTEBOOK + ") + EvidenceName(Granted), After);
@@ -600,6 +610,7 @@ void ANoirPlayerController::HandleReply(const FInterrogationReply& Reply)
 		if (!Suspects[i].bLeftNoted && HasLeft(i))
 		{
 			Suspects[i].bLeftNoted = true;
+			if (i == Current) Input.Reset();
 			AddNote(Suspects[i], Suspects[i].Name + TEXT(" has walked out. This interview is over."), After);
 		}
 	}

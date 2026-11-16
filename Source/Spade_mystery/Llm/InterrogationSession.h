@@ -60,6 +60,8 @@ public:
 
 	/** Cache every suspect's static prefix in its slot. Call behind a loading screen once the server is ready. */
 	void PreloadAll();
+	bool IsPreloading() const { return PendingPreloads > 0; }
+	const FString& GetPreloadError() const { return PreloadError; }
 
 	/** Typed line to a suspect. False if that suspect is busy or the server is not ready. */
 	bool Ask(const FString& SuspectId, const FString& PlayerLine);
@@ -86,4 +88,6 @@ private:
 	FLlmCase Case;
 	FLlmCaseState State;
 	TSet<FString> Busy;
+	int32 PendingPreloads = 0;
+	FString PreloadError;
 };

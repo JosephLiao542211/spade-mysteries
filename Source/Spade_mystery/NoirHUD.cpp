@@ -114,7 +114,7 @@ void ANoirHUD::DrawHUD()
 	EnsureResources(ANoirRoom::DesiredResolution());
 
 	// Who sits in the chair.
-	const int32 Want = (PC->State == ENoirState::Briefing) ? INDEX_NONE : PC->Current;
+	const int32 Want = (PC->State == ENoirState::Briefing || PC->HasLeft(PC->Current)) ? INDEX_NONE : PC->Current;
 	if (Want != ShownSuspect)
 	{
 		PC->Room->ShowSuspect(Want);
@@ -258,8 +258,11 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 		{
 			InkWrapped(C, Status, 76, TextEnd + 8, LX - 152, Small);
 		}
-		const FString Label = TEXT("BEGIN [SPACE]");
-		Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 262, Body, ENoirAction::Begin);
+		else if (!PC.Suspects.IsEmpty())
+		{
+			const FString Label = TEXT("BEGIN [SPACE]");
+			Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 262, Body, ENoirAction::Begin);
+		}
 		break;
 	}
 
@@ -293,7 +296,7 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 		{
 			// A slim row of buttons along the bottom; the scene stays clear.
 			const FString Count = FString::Printf(TEXT("%d/%d"), PC.Current + 1, PC.Suspects.Num());
-			const FString TalkL = TEXT("TALK [T]");
+			const FString TalkL = PC.HasLeft(PC.Current) ? TEXT("READ INTERVIEW [T]") : TEXT("TALK [T]");
 			const FString NoteL = FString::Printf(TEXT("NOTEBOOK [N] (%d)"), PC.NotebookIds().Num());
 			const FString AccuseL = TEXT("ACCUSE [X]");
 			const float Gap = 4;
@@ -502,8 +505,11 @@ void ANoirHUD::DrawNotebook(UCanvas* C, const ANoirPlayerController& PC)
 			TextX, Y + 6, TextWMax, Body);
 		return;
 	}
-	Y = InkWrapped(C, FString::Printf(TEXT("Click a statement, or press its number, to repeat it to %s.  * = already told them."), *Sus.Name),
-		TextX, Y, TextWMax, Small) + 4;
+	const bool bCanPresent = !PC.HasLeft(PC.Current) && PC.GetServerStatus().IsEmpty();
+	const FString Instructions = bCanPresent
+		? FString::Printf(TEXT("Click a statement, or press its number, to repeat it to %s.  * = already told them."), *Sus.Name)
+		: FString(TEXT("Read your statements here. Select an available witness to present one."));
+	Y = InkWrapped(C, Instructions, TextX, Y, TextWMax, Small) + 4;
 	Fill(C, PX + 6, Y, PW - 12, 1, InkColor);
 	Y += 4;
 
@@ -518,7 +524,7 @@ void ANoirHUD::DrawNotebook(UCanvas* C, const ANoirPlayerController& PC)
 			HoveredEntry = i;
 		}
 		Row(C, FString::Printf(TEXT("%s%s %s"), *Number, Mark, *PC.EvidenceName(Ids[i])), PX + 6, Y, PW - 12, Body,
-			ENoirAction(int32(ENoirAction::Present0) + i));
+			bCanPresent ? ENoirAction(int32(ENoirAction::Present0) + i) : ENoirAction::None);
 		Y += RowH;
 	}
 
