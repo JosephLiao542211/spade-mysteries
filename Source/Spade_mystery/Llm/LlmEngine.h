@@ -80,6 +80,12 @@ namespace LlmEngine
 	void SeeEvidence(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& EvidenceId, FLlmTurnEvent& Ev);
 	TArray<FLlmMessage> BuildMessages(const FLlmCase& Case, const FLlmCaseState& State, const FString& Sid, const FString& LastUser);
 
+	/** True if the line uses any part of the suspect's name ("Tommy", "Mullen"). */
+	bool NamesSuspect(const FString& Line, const FLlmSuspectDef& Def);
+	/** What the player reads when a secret comes out, in the third person: the secret's clue, or the statements it
+	 *  grants. The secret's own text is written to the suspect ("You pulled the main fuse..."). */
+	FString ClueText(const FLlmCase& Case, const FString& Sid, const FString& SecretId, const FString& Fallback);
+
 	/** Apply one exchange. Parsed = nullptr if the reply was invalid. PresentedEvidence non-empty for an evidence event.
 	 *  Allowed = secrets available when the request was sent (id -> text). */
 	FLlmTurnEvent ResolveTurn(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& UserMsg,

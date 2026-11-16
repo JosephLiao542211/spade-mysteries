@@ -56,6 +56,7 @@
   "rules": [
     {
       "mode": "trigger",
+      "announce": "Tommy clams up and asks for a lawyer. He will not say another word for now.",
       "when": { "fear_gte": 85 },
       "shutdown_turns": 2,
       "after_shutdown_set": { "fear": 70 },

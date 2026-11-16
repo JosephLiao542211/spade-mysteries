@@ -58,6 +58,7 @@
   "rules": [
     {
       "mode": "trigger",
+      "announce": "Mickey panics. He swears he saw nothing and begs to be left alone. He will be no use until he calms down.",
       "when": { "fear_gte": 85 },
       "shutdown_turns": 3,
       "after_shutdown_set": { "fear": 60 },

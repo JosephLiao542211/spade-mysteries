@@ -10,10 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CASE = engine.load_case(ROOT / "Content" / "Llm" / "Cases" / "SpadeClub")
 
 
-def turn(cs, sid, t, c="none", g="none", f="none", present=None):
+def turn(cs, sid, t, c="none", g="none", f="none", present=None, say="x"):
     allowed = dict(engine.available_secrets(cs, sid))
     parsed = None if present else {"t": t, "c": c, "g": g, "e": "calm", "r": "...", "f": f}
-    return engine.resolve_turn(cs, sid, "x", parsed, "{}", allowed, presented=present)
+    return engine.resolve_turn(cs, sid, engine.detective_message(say), parsed, "{}", allowed, presented=present)
 
 
 def avail(cs, sid):
@@ -39,8 +39,16 @@ def main():
     ok &= check("vera starts with no secrets", avail(cs, "vera_lane") == [])
     turn(cs, "vera_lane", "flattery")
     ok &= check("flattering vera raises her composure", v.meters["composure"] == 90)
-    ev = turn(cs, "vera_lane", "logic", c="stmt_vera_paid")  # not held
+    ev = turn(cs, "vera_lane", "question", c="stmt_vera_paid", say="Did you pay someone to cut the lights?")
+    ok &= check("a claim that names no witness is not a bluff", not ev["bluff"] and v.meters["composure"] == 90)
+    ev = turn(cs, "vera_lane", "question", c="stmt_vera_went_up", say="Miss Lane, did you go up the back stairs?")
+    ok &= check("nobody is bluffed with their own statement", not ev["bluff"] and v.meters["composure"] == 90)
+    ev = turn(cs, "vera_lane", "logic", c="stmt_vera_paid", say="Tommy Mullen told me you paid him to kill the lights.")  # not held
     ok &= check("vera catches a bluffed statement and steadies", ev["bluff"] and v.caught_bluff and v.meters["composure"] == 95)
+    ok &= check("clue text is third person, from the granted statement",
+                engine.clue_text(CASE, "tommy_mullen", "who_paid").startswith("Tommy Mullen says Vera Lane paid him"))
+    ok &= check("clue text for a secret with no statement uses its clue field",
+                engine.clue_text(CASE, "vera_lane", "confession").startswith("Vera Lane confesses"))
     cs = engine.CaseState(CASE)
     v = cs.suspects["vera_lane"]
     cs.inventory |= {"stmt_singing_stopped", "stmt_vera_paid", "stmt_vera_bar"}
@@ -133,8 +141,9 @@ def main():
     ok &= check("the ledger statement plus gossip: temper 65", lo.meters["temper"] == 65)
     ok &= check("telling logan about the cloakroom scares allison", cs.suspects["allison_wu"].meters["fear"] == 60)
     ok &= check("and blocks his secrets", engine.secrets_blocked(cs, "logan_wu"))
-    turn(cs, "logan_wu", "challenge_pride")
+    ev = turn(cs, "logan_wu", "challenge_pride")
     ok &= check("logan walks out at temper 80 and takes allison", lo.closed and cs.suspects["allison_wu"].closed)
+    ok &= check("the walk-out is announced to the player in the third person", ev["triggers"] and ev["triggers"][0].startswith("Logan Wu stands"))
 
     # --- Accusation.
     cs = engine.CaseState(CASE)

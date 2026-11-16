@@ -54,6 +54,7 @@
     },
     {
       "mode": "trigger",
+      "announce": "Logan Wu stands, takes his hat and walks out of the club, and takes his wife Allison home with him. Neither of them will answer anything more.",
       "when": { "temper_gte": 80 },
       "end_interview": true,
       "close_others": ["allison_wu"],
@@ -63,6 +64,7 @@
   "secrets": [
     {
       "id": "ace_debt",
+      "clue": "Logan Wu says Ace owed him eight thousand dollars for an import loan, and that Ace's death ruins him.",
       "topic": "your business with Ace, money, or the loan",
       "text": "Ace owed you eight thousand dollars for an import loan. Dead, he can never pay it back; his death ruins you.",
       "routes": [{ "when": { "fear_gte": 35 } }]

@@ -151,6 +151,7 @@ namespace
 			R.bWhile = Str(O, TEXT("mode")) != TEXT("trigger");
 			R.When = Condition(Obj(O, TEXT("when")));
 			R.Note = Str(O, TEXT("note"));
+			R.Announce = Str(O, TEXT("announce"));
 			O->TryGetBoolField(TEXT("block_secrets"), R.bBlockSecrets);
 			O->TryGetNumberField(TEXT("shutdown_turns"), R.ShutdownTurns);
 			R.AfterShutdownSet = Effects(Obj(O, TEXT("after_shutdown_set")));
@@ -166,6 +167,7 @@ namespace
 			Sec.Id = Str(O, TEXT("id"));
 			Sec.Topic = Str(O, TEXT("topic"));
 			Sec.Text = Str(O, TEXT("text"));
+			Sec.Clue = Str(O, TEXT("clue"));
 			// A single id or a list.
 			if (!O->TryGetStringArrayField(TEXT("grants_evidence"), Sec.GrantsEvidence))
 			{

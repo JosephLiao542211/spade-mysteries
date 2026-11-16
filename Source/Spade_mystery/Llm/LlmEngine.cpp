@@ -270,6 +270,47 @@ TArray<FLlmMessage> LlmEngine::BuildMessages(const FLlmCase& Case, const FLlmCas
 	return Msgs;
 }
 
+bool LlmEngine::NamesSuspect(const FString& Line, const FLlmSuspectDef& Def)
+{
+	// Words are runs of letters, compared without case ("Tommy's" -> tommy, s).
+	auto LetterWords = [](const FString& Text)
+	{
+		TArray<FString> Out;
+		FString Word;
+		for (const TCHAR Ch : Text.ToLower() + TEXT(" "))
+		{
+			if (Ch >= TEXT('a') && Ch <= TEXT('z'))
+			{
+				Word.AppendChar(Ch);
+				continue;
+			}
+			if (!Word.IsEmpty()) Out.Add(Word);
+			Word.Reset();
+		}
+		return Out;
+	};
+	const TArray<FString> LineWords = LetterWords(Line);
+	for (const FString& Part : LetterWords(Def.Name))
+	{
+		if (Part.Len() >= 3 && LineWords.Contains(Part)) return true;
+	}
+	return false;
+}
+
+FString LlmEngine::ClueText(const FLlmCase& Case, const FString& Sid, const FString& SecretId, const FString& Fallback)
+{
+	const FLlmSuspectDef* Def = Case.FindSuspect(Sid);
+	const FLlmSecret* Sec = Def ? Def->FindSecret(SecretId) : nullptr;
+	if (!Sec) return Fallback;
+	if (!Sec->Clue.IsEmpty()) return Sec->Clue;
+	TArray<FString> Lines;
+	for (const FString& G : Sec->GrantsEvidence)
+	{
+		if (const FLlmEvidence* E = Case.FindEvidence(G)) Lines.Add(E->Description);
+	}
+	return Lines.Num() > 0 ? FString::Join(Lines, TEXT(". ")) + TEXT(".") : Fallback;
+}
+
 FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State, const FString& Sid, const FString& UserMsg,
 	const FLlmParsedReply* Parsed, const FString& Raw, const TMap<FString, FString>& Allowed, const FString& PresentedEvidence)
 {
@@ -299,6 +340,14 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 			// claim made a false bluff in the harness. Trust g and drop c.
 			C = None();
 		}
+		if (!C.IsEmpty() && C != None() && !State.Inventory.Contains(C) && Claimed && !Claimed->Source.IsEmpty())
+		{
+			// Bluffing a statement means naming the witness ("Tommy told me..."). "Did you go up the back stairs?"
+			// came back as c=<a statement about the stairs>: a false bluff that steadied Vera and punished the
+			// player. Nobody can be bluffed with their own statement either.
+			const FLlmSuspectDef* Witness = Case.FindSuspect(Claimed->Source);
+			if (Claimed->Source == Sid || !Witness || !NamesSuspect(UserMsg, *Witness)) C = None();
+		}
 		if (!C.IsEmpty() && C != None())
 		{
 			if (State.Inventory.Contains(C))
@@ -326,7 +375,7 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 		{
 			St->Revealed.Add(Parsed->Secret, *Text);
 			Ev.Revealed = Parsed->Secret;
-			Ev.RevealedText = *Text;
+			Ev.RevealedText = ClueText(Case, Sid, Parsed->Secret, *Text); // for the player; St->Revealed keeps the suspect's wording
 			if (const FLlmSecret* Sec = Def->FindSecret(Parsed->Secret))
 			{
 				for (const FString& G : Sec->GrantsEvidence)
@@ -361,7 +410,7 @@ FLlmTurnEvent LlmEngine::ResolveTurn(const FLlmCase& Case, FLlmCaseState& State,
 		}
 		if (St->Fired.Contains(i)) continue;
 		St->Fired.Add(i);
-		Ev.Triggers.Add(R.Note);
+		Ev.Triggers.Add(R.Announce.IsEmpty() ? R.Note : R.Announce); // Announce = the same event told to the player
 		if (R.ShutdownTurns > 0)
 		{
 			St->ShutdownLeft = R.ShutdownTurns;

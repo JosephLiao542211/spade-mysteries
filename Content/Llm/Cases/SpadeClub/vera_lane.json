@@ -71,6 +71,7 @@
     },
     {
       "id": "confession",
+      "clue": "Vera Lane confesses: she took Mickey's revolver from under the bar, paid Tommy to kill the lights, went up the back stairs and shot Ace at his desk, because he had sold her contract to Sal Varga.",
       "topic": "Ace's death, the gun, the twenty dollars, or what really happened in the office",
       "text": "You confess. You took Mickey's revolver from under the bar, paid Tommy to kill the lights, went up the back stairs and shot Ace at his desk. Twelve years you sang for him, and he sold you to Sal Varga like a used car.",
       "routes": [{ "when": { "composure_lt": 20, "fear_gte": 40, "revealed": ["went_up"] } }]

@@ -6,6 +6,7 @@ Data format: Content/Llm/Cases/<Case>/case.json + one JSON per suspect (see docs
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -242,6 +243,24 @@ def build_messages(cs, sid, last_user):
 
 # ---------- turn resolution ----------
 
+def names_suspect(line, sdef):
+    """True if the line uses any part of the suspect's name ("Tommy", "Mullen")."""
+    words = set(re.findall(r"[a-z]+", line.lower()))
+    return any(p.lower() in words for p in re.findall(r"[A-Za-z]{3,}", sdef["name"]))
+
+
+def clue_text(case, sid, secret_id, fallback=""):
+    """What the player reads when a secret comes out, in the third person. The secret's own text is written to
+    the suspect ("You pulled the main fuse..."), so use its `clue` field, or the statements it grants."""
+    sec = next((s for s in case["suspect_defs"][sid]["secrets"] if s["id"] == secret_id), None)
+    if not sec:
+        return fallback
+    if sec.get("clue"):
+        return sec["clue"]
+    lines = [case["evidence_by_id"][g]["description"] for g in sec["grants_evidence"] if g in case["evidence_by_id"]]
+    return ". ".join(lines) + "." if lines else fallback
+
+
 def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
     """Apply the outcome of one exchange. parsed = model JSON (or None). presented = evidence id if this turn
     was an evidence presentation event. Returns a dict describing what happened."""
@@ -260,6 +279,12 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
         if g != NONE and src and src != g:
             # "Vera says she saw you..." came back as g=vera_lane, c=<Mickey's statement about Vera>: inconsistent,
             # and treating it as a claim made it a false bluff. Trust g and drop c.
+            c = NONE
+        if c != NONE and c not in cs.inventory and src and (
+                src == sid or not names_suspect(user_msg, case["suspect_defs"][src])):
+            # Bluffing a statement means naming the witness ("Tommy told me..."). "Did you go up the back stairs?"
+            # came back as c=<a statement about the stairs>: a false bluff that steadied Vera and punished the
+            # player. Nobody can be bluffed with their own statement either.
             c = NONE
         if c != NONE:
             if c in cs.inventory:
@@ -298,7 +323,7 @@ def resolve_turn(cs, sid, user_msg, parsed, raw, allowed, presented=None):
         if i in st.fired:
             continue
         st.fired.add(i)
-        ev["triggers"].append(r["note"])
+        ev["triggers"].append(r.get("announce") or r["note"])  # announce = the same event told to the player
         if r.get("shutdown_turns"):
             st.shutdown_left = r["shutdown_turns"]
             st.shutdown_note = r["note"]

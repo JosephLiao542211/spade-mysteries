@@ -33,6 +33,8 @@ struct FLlmRule
 	bool bWhile = true;
 	FLlmCondition When;
 	FString Note;
+	/** Trigger rules: the same event told to the player in the third person. Empty = Note. */
+	FString Announce;
 	bool bBlockSecrets = false;
 	int32 ShutdownTurns = 0;
 	FLlmEffects AfterShutdownSet;
@@ -55,6 +57,8 @@ struct FLlmSecret
 	FString Id;
 	FString Topic;
 	FString Text;
+	/** What the player reads when this comes out (third person). Empty = the statements it grants. */
+	FString Clue;
 	TArray<FString> GrantsEvidence;
 	TArray<FLlmSecretRoute> Routes;
 };
@@ -95,7 +99,7 @@ struct FLlmSuspectDef
 	TArray<FLlmRule> Rules;
 	TArray<FLlmSecret> Secrets;
 
-	const FLlmMeterDef* FindMeter(const FString& Name) const { return Meters.FindByPredicate([&](const FLlmMeterDef& M) { return M.Name == Name; }); }
+	const FLlmMeterDef* FindMeter(const FString& InName) const { return Meters.FindByPredicate([&](const FLlmMeterDef& M) { return M.Name == InName; }); }
 	const FLlmSecret* FindSecret(const FString& InId) const { return Secrets.FindByPredicate([&](const FLlmSecret& S) { return S.Id == InId; }); }
 };
 
