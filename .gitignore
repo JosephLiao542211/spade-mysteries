@@ -33,3 +33,4 @@ ThirdParty/llama/
 
 # Python bytecode
 __pycache__/
+*.pyc

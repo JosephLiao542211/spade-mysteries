@@ -1,0 +1,17 @@
+{
+  "portrait_prompt": "Stylized film noir illustration, graphic novel ink style, stark black and white, crisp silhouettes, bold ink shading. Plain black background, single spotlight from above, high contrast, no color. Medium-wide shot, camera at eye level, centered, seated facing the camera behind the edge of a small dark table, both forearms resting on the table. A glamorous, very attractive East Asian jazz club torch singer in the 1930s, very slender and thin, elegant long neck. Upturned almond fox-like eyes with dark winged liner, full pouty dark lips, a small beauty mole on her left cheek, sleek black hair in an elegant updo with a single long peacock feather tucked into it. Wearing a western-style beaded evening gown with long satin gloves, an expensive glittering jeweled statement necklace, and a fur stole draped around both shoulders. Poised, mysterious, alluring.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. She stays seated facing the camera with her forearms on the table. At the end she returns exactly to her starting pose. She is poised and sultry: a slow, knowing glance at the camera, a small enigmatic smile, she lightly touches her jeweled necklace with gloved fingers, the peacock feather in her hair sways gently, she settles the fur stole on her shoulders, a slow blink. Smooth, slow, elegant motion.",
+  "portrait_job": {
+    "model": "fal-ai/flux-pro/v1.1-ultra",
+    "request_id": "01a1da13-de44-7e53-87a6-d524b78c8193",
+    "status_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da13-de44-7e53-87a6-d524b78c8193/status",
+    "response_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da13-de44-7e53-87a6-d524b78c8193"
+  },
+  "image_url": "https://v3b.fal.media/files/b/0ab26f1a/0EgO38Uut1XkR3C1MODNf_ce9259f389084e97a9d24876139aed5b.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1da14-196c-7da0-8560-75e2ff921ec1",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da14-196c-7da0-8560-75e2ff921ec1/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da14-196c-7da0-8560-75e2ff921ec1"
+  }
+}

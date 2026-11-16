@@ -9,7 +9,7 @@ public class Spade_mystery : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "DeveloperSettings" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "DeveloperSettings", "AnimationCore", "ChaosClothAssetEngine", "MediaAssets" });
 
 		// Local LLM sidecar (Source/Spade_mystery/Llm): HTTP to llama-server, JSON, port probing, debug chat window.
 		PrivateDependencyModuleNames.AddRange(new string[] { "HTTP", "Json", "Sockets", "Slate", "SlateCore" });

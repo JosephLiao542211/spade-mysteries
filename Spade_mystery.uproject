@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.8",
 	"Category": "",
-	"Description": "",
+	"Description": "Simple 1-bit dithered 3D noir interrogation game.",
 	"Modules": [
 		{
 			"Name": "Spade_mystery",
@@ -12,14 +12,25 @@
 	],
 	"Plugins": [
 		{
-			"Name": "ModelingToolsEditorMode",
+			"Name": "ModelContextProtocol",
+			"Enabled": true
+		},
+		{
+			"Name": "MetaHumanCharacter",
 			"Enabled": true,
 			"TargetAllowList": [
 				"Editor"
 			]
 		},
 		{
-			"Name": "ModelContextProtocol",
+			"Name": "MetaHumanGenerator",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ChaosClothAsset",
 			"Enabled": true
 		}
 	]

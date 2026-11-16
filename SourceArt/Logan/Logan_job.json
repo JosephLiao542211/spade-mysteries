@@ -1,0 +1,17 @@
+{
+  "portrait_prompt": "Stylized film noir illustration, graphic novel ink style, stark black and white, crisp silhouettes, bold ink shading. Plain black background, single spotlight from above, high contrast, no color. Medium-wide shot, camera at eye level, centered, seated facing the camera behind the edge of a small dark table, forearms resting on the table. A tall, lean East Asian businessman, 47 years old, sitting very upright and stiff. Heavy-lidded tired eyes, sunken cheeks, deep forehead wrinkles, a neat moustache and patchy bits of short beard, a monocle over one eye with a thin chain. Wearing a crisp pinstriped dress shirt with sleeves neatly buttoned, a tie, and suspenders; his suit jacket is draped over the back of his chair behind him. A gold wedding ring and a wristwatch visible on his hands, a folded white handkerchief in one hand. Weary, proper, anxious.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. He stays seated upright facing the camera. At the end he returns exactly to his starting pose. He sits upright and anxious: he slowly raises the white handkerchief and dabs the sweat from his wrinkled forehead, lowers it back to the table, then tilts his head slightly to the left, pauses, and tilts it slightly to the right, his monocle catching the light. Slow, tired, restrained motion.",
+  "portrait_job": {
+    "model": "fal-ai/flux-pro/v1.1-ultra",
+    "request_id": "01a1da24-e26d-7d80-89f0-d389ec4399e6",
+    "status_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da24-e26d-7d80-89f0-d389ec4399e6/status",
+    "response_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1da24-e26d-7d80-89f0-d389ec4399e6"
+  },
+  "image_url": "https://v3b.fal.media/files/b/0ab26f8a/th3p_Uqv0Qy9ODzY7qxh7_a181933eb80f482296e6265f84a1d9cc.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1da25-1f22-7551-8188-115bd3c7b86f",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da25-1f22-7551-8188-115bd3c7b86f/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1da25-1f22-7551-8188-115bd3c7b86f"
+  }
+}

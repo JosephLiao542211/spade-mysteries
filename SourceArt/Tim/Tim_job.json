@@ -1,0 +1,17 @@
+{
+  "portrait_prompt": "Stylized film noir illustration, graphic novel ink style, Sin City inspired stark black and white, crisp silhouettes, bold ink shading. Pure black background, single hard spotlight from above, deep shadows, high contrast, no color. Medium-wide shot, camera at eye level, centered, seated facing the camera behind the edge of a small dark table. A very skinny, slender young 1930s hotel bellboy, early twenties, in a fitted bellhop uniform: short jacket with two rows of shiny buttons, pillbox cap with chin strap. Thin narrow face, gaunt cheeks, huge wide frightened eyes, light curly ginger hair sprouting out under the cap, freckles, long thin neck. Nervous hunched shoulders, thin fingers fidgeting together on the table. Exaggerated lanky proportions.",
+  "motion_prompt": "Static locked-off camera, no camera movement. Stark black and white graphic novel ink style. He stays seated facing the camera. At the end he returns exactly to his starting pose. He is very nervous and jittery: his huge eyes dart left and right, he swallows hard, glances quickly over his shoulder, fidgets and wrings his thin fingers, tugs his collar, gives a shaky forced smile at the camera, then freezes wide-eyed.",
+  "portrait_job": {
+    "model": "fal-ai/flux-pro/v1.1-ultra",
+    "request_id": "01a1d914-9f72-73a0-a42c-e0eac4002d15",
+    "status_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1d914-9f72-73a0-a42c-e0eac4002d15/status",
+    "response_url": "https://queue.fal.run/fal-ai/flux-pro/requests/01a1d914-9f72-73a0-a42c-e0eac4002d15"
+  },
+  "image_url": "https://v3b.fal.media/files/b/0ab26891/G8ejZ0BjHaudpZG9TnsuH_acf2bd1646d34e1cb9d3c620f5681d7f.png",
+  "video_job": {
+    "model": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "request_id": "01a1d914-dc0a-7232-9768-7a29d770e77e",
+    "status_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1d914-dc0a-7232-9768-7a29d770e77e/status",
+    "response_url": "https://queue.fal.run/fal-ai/kling-video/requests/01a1d914-dc0a-7232-9768-7a29d770e77e"
+  }
+}
