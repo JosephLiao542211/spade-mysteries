@@ -250,26 +250,42 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 	{
 	case ENoirState::Briefing:
 	{
-		Box(C, 70, 40, LX - 140, 200);
-		InkCentered(C, TEXT("THE BLACK SPADE KILLING"), 52, Body * 1.6f);
-		InkWrapped(C, ANoirPlayerController::GetBriefing(), 86, 88, LX - 172, Body);
+		Box(C, 60, 30, LX - 120, 262);
+		InkCentered(C, PC.GetTitle(), 42, Body * 1.6f);
+		const float TextEnd = InkWrapped(C, PC.GetBriefing(), 76, 76, LX - 152, Body);
+		const FString Status = PC.GetServerStatus();
+		if (!Status.IsEmpty())
+		{
+			InkWrapped(C, Status, 76, TextEnd + 8, LX - 152, Small);
+		}
 		const FString Label = TEXT("BEGIN [SPACE]");
-		Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 208, Body, ENoirAction::Begin);
+		Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 262, Body, ENoirAction::Begin);
 		break;
 	}
 
 	case ENoirState::Interrogate:
 	case ENoirState::ConfirmAccuse:
 	{
+		if (!PC.Suspects.IsValidIndex(PC.Current))
+		{
+			break;
+		}
 		const FNoirSuspect& Sus = PC.Suspects[PC.Current];
+		const FString Role = PC.HasLeft(PC.Current) ? FString(TEXT("Walked out. Will not talk.")) : Sus.Role;
 
 		// Small name tag.
-		const float TagW = FMath::Max(TextW(Sus.Name, Body), TextW(Sus.Role, Small)) + 10;
+		const float TagW = FMath::Max(TextW(Sus.Name, Body), TextW(Role, Small)) + 10;
 		Box(C, 8, 8, TagW, LineH(Body) + LineH(Small) + 6);
 		Ink(C, Sus.Name, 13, 11, Body);
-		Ink(C, Sus.Role, 13, 11 + LineH(Body), Small);
+		Ink(C, Role, 13, 11 + LineH(Body), Small);
 
-		if (PC.bTalking)
+		DrawMeters(C, PC);
+
+		if (PC.State == ENoirState::Interrogate && PC.bNotebook)
+		{
+			DrawNotebook(C, PC);
+		}
+		else if (PC.bTalking)
 		{
 			DrawTalkPanel(C, PC, Now);
 		}
@@ -278,14 +294,11 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 			// A slim row of buttons along the bottom; the scene stays clear.
 			const FString Count = FString::Printf(TEXT("%d/%d"), PC.Current + 1, PC.Suspects.Num());
 			const FString TalkL = TEXT("TALK [T]");
+			const FString NoteL = FString::Printf(TEXT("NOTEBOOK [N] (%d)"), PC.NotebookIds().Num());
 			const FString AccuseL = TEXT("ACCUSE [X]");
 			const float Gap = 4;
-			const FNoirSuspectSlot* Slot = UNoirLookSettings::Get().GetSuspectSlot(PC.Current);
-			const bool bMoods = Slot && !Slot->Video.FilePath.IsEmpty() && Slot->MoodVideos.Num() > 0;
-			const FString MoodL = bMoods ? FString::Printf(TEXT("MOOD: %s [M]"), *Slot->ActiveMoodLabel()) : FString();
 			const float RowW = ButtonW(TEXT("<"), Small) + ButtonW(Count, Small) + ButtonW(TEXT(">"), Small)
-				+ ButtonW(TalkL, Small) + ButtonW(AccuseL, Small) + Gap * 4 + 8
-				+ (bMoods ? ButtonW(MoodL, Small) + Gap : 0.f);
+				+ ButtonW(TalkL, Small) + ButtonW(NoteL, Small) + ButtonW(AccuseL, Small) + Gap * 5 + 8;
 			const float Y = LY - 8 - ButtonH(Small);
 			float X = (LX - RowW) * 0.5f;
 			X += Button(C, TEXT("<"), X, Y, Small, ENoirAction::Prev) + Gap;
@@ -294,10 +307,7 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 			X += ButtonW(Count, Small) + Gap;
 			X += Button(C, TEXT(">"), X, Y, Small, ENoirAction::Next) + Gap + 8;
 			X += Button(C, TalkL, X, Y, Small, ENoirAction::Talk) + Gap;
-			if (bMoods)
-			{
-				X += Button(C, MoodL, X, Y, Small, ENoirAction::Mood) + Gap;
-			}
+			X += Button(C, NoteL, X, Y, Small, ENoirAction::Notebook) + Gap;
 			Button(C, AccuseL, X, Y, Small, ENoirAction::Accuse);
 		}
 
@@ -320,67 +330,141 @@ void ANoirHUD::DrawUi(UCanvas* C, const ANoirPlayerController& PC)
 	{
 		const bool bWon = PC.State == ENoirState::Solved;
 		Box(C, 0, 0, LX, LY);
-		InkCentered(C, bWon ? TEXT("CASE CLOSED") : TEXT("WRONG MAN"), 70, Body * 2.2f);
-		InkWrapped(C, PC.GetEnding(), 90, 130, LX - 180, Body);
+		InkCentered(C, bWon ? TEXT("CASE CLOSED") : TEXT("CASE NOT CLOSED"), 34, Body * 1.2f);
+		InkCentered(C, PC.EndingTitle.ToUpper(), 58, Body * 2.2f);
+		InkWrapped(C, PC.EndingText, 70, 104, LX - 140, Body);
 		const FString Label = TEXT("REOPEN THE CASE [R]");
-		Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 296, Body, ENoirAction::Restart);
+		Button(C, Label, (LX - ButtonW(Label, Body)) * 0.5f, 322, Body, ENoirAction::Restart);
 		break;
 	}
+	}
+}
+
+void ANoirHUD::DrawMeters(UCanvas* C, const ANoirPlayerController& PC)
+{
+	// Two bars per suspect, top right: Fear and their own personality bar.
+	const TArray<FNoirMeter> Meters = PC.GetMeters(PC.Current);
+	if (Meters.Num() == 0)
+	{
+		return;
+	}
+	float LabelW = 0.f;
+	for (const FNoirMeter& M : Meters)
+	{
+		LabelW = FMath::Max(LabelW, TextW(M.Label, Small));
+	}
+	const float BarW = 60, BarH = 5, RowH = LineH(Small) + 3;
+	const float W = LabelW + BarW + 16;
+	const float X = LX - 8 - W, Y = 8;
+	const float T = 1.f / UiScale; // one real pixel, in layout units
+	Box(C, X, Y, W, RowH * Meters.Num() + 5);
+	for (int32 i = 0; i < Meters.Num(); ++i)
+	{
+		const float RY0 = Y + 3 + RowH * i;
+		Ink(C, Meters[i].Label, X + 5, RY0, Small);
+		const float BX = X + 10 + LabelW;
+		const float BY = RY0 + (LineH(Small) - BarH) * 0.5f;
+		Fill(C, BX, BY, BarW, BarH, InkColor);
+		Fill(C, BX + T, BY + T, BarW - 2 * T, BarH - 2 * T, BoxColor);
+		const float Filled = (BarW - 2 * T) * FMath::Clamp(Meters[i].Value / 100.f, 0.f, 1.f);
+		if (Filled > 0.f)
+		{
+			Fill(C, BX + T, BY + T, Filled, BarH - 2 * T, InkColor);
+		}
 	}
 }
 
 void ANoirHUD::DrawTalkPanel(UCanvas* C, const ANoirPlayerController& PC, double Now)
 {
 	const FNoirSuspect& Sus = PC.Suspects[PC.Current];
-	const TArray<FString>& Questions = ANoirPlayerController::GetQuestions();
 
-	const float PX = 8, PW = LX - 16, PH = 140;
+	const float PX = 8, PW = LX - 16, PH = 170;
 	const float PY = LY - 8 - PH;
 	Box(C, PX, PY, PW, PH);
 
-	// Header: who you're talking to, and a way out.
+	// Header: who you're talking to, how your last line landed, the notebook, and a way out.
 	FString First, Rest;
 	if (!Sus.Name.Split(TEXT(" "), &First, &Rest))
 	{
 		First = Sus.Name;
 	}
 	First = First.ToUpper();
-	const FString CloseL = TEXT("CLOSE [T]");
-	Button(C, CloseL, PX + PW - 4 - ButtonW(CloseL, Small), PY + 4, Small, ENoirAction::Talk);
-	const FString NavL = TEXT("<");
+	const FString CloseL = TEXT("CLOSE [DOWN]");
+	const FString NoteL = FString::Printf(TEXT("NOTEBOOK [TAB] (%d)"), PC.NotebookIds().Num());
+	float Right = PX + PW - 4 - ButtonW(CloseL, Small);
+	Button(C, CloseL, Right, PY + 4, Small, ENoirAction::Talk);
+	Right -= ButtonW(NoteL, Small) + 4;
+	Button(C, NoteL, Right, PY + 4, Small, ENoirAction::Notebook);
 	const float NavX = PX + 6;
-	const float AfterNav = NavX + Button(C, NavL, NavX, PY + 4, Small, ENoirAction::Prev) + 3;
+	const float AfterNav = NavX + Button(C, TEXT("<"), NavX, PY + 4, Small, ENoirAction::Prev) + 3;
 	const float NameX = AfterNav + Button(C, TEXT(">"), AfterNav, PY + 4, Small, ENoirAction::Next) + 6;
-	Ink(C, FString::Printf(TEXT("TALKING TO %s"), *Sus.Name.ToUpper()), NameX, PY + 7, Small);
-
-	// Questions, along the bottom of the panel.
-	const float RowH = LineH(Body) + 2;
-	const float QY = PY + PH - 4 - RowH * Questions.Num();
-	Fill(C, PX + 6, QY - 3, PW - 12, 1, InkColor);
-	for (int32 i = 0; i < Questions.Num(); ++i)
+	const FString Header = FString::Printf(TEXT("TALKING TO %s"), *Sus.Name.ToUpper());
+	Ink(C, Header, NameX, PY + 7, Small);
+	if (!Sus.LastRead.IsEmpty())
 	{
-		const TCHAR* Mark = PC.WasAsked(PC.Current, i) ? TEXT("*") : TEXT(" ");
-		Row(C, FString::Printf(TEXT("[%d]%s %s"), i + 1, Mark, *Questions[i]), PX + 6, QY + RowH * i, PW - 12, Body, ENoirAction(int32(ENoirAction::Ask1) + i));
+		// Show how the line was read: a misread becomes something the player can see and correct.
+		Ink(C, FString::Printf(TEXT("READ AS: %s"), *Sus.LastRead), NameX + TextW(Header, Small) + 14, PY + 7, Small);
+	}
+
+	// The line being typed, along the bottom of the panel.
+	const float TextX = PX + 10, TextWMax = PW - 20;
+	const float RowH = LineH(Body) + 4;
+	const float IY = PY + PH - 4 - RowH;
+	Fill(C, PX + 6, IY - 3, PW - 12, 1, InkColor);
+	const FString Status = PC.GetServerStatus();
+	if (PC.HasLeft(PC.Current))
+	{
+		Ink(C, FString::Printf(TEXT("%s HAS WALKED OUT."), *First), TextX, IY + 2, Body);
+	}
+	else if (PC.IsThinking(PC.Current))
+	{
+		const int32 Dots = 1 + (FMath::FloorToInt32(Now * 3.0) % 3);
+		Ink(C, FString::Printf(TEXT("%s IS THINKING%s"), *First, *FString::ChrN(Dots, TEXT('.'))), TextX, IY + 2, Body);
+	}
+	else if (!Status.IsEmpty())
+	{
+		Ink(C, Status, TextX, IY + 2, Small);
+	}
+	else
+	{
+		const TCHAR* Caret = (FMath::FloorToInt32(Now * 2.0) % 2 == 0) ? TEXT("_") : TEXT(" ");
+		FString Shown = PC.Input;
+		while (Shown.Len() > 1 && TextW(FString(TEXT("> ")) + Shown + TEXT("_"), Body) > TextWMax)
+		{
+			Shown = Shown.RightChop(1); // long lines scroll: keep the end in view
+		}
+		Ink(C, FString(TEXT("> ")) + Shown + Caret, TextX, IY + 2, Body);
+		if (PC.Input.IsEmpty())
+		{
+			Ink(C, TEXT("type what you say to them, then press ENTER"), TextX + 22, IY + 3, Small);
+		}
 	}
 
 	// Transcript, newest at the bottom; older lines scroll off the top.
 	const float TopY = PY + 6 + ButtonH(Small) + 2;
 	const float LH = LineH(Body);
-	const int32 MaxLines = FMath::Max(1, FMath::FloorToInt32((QY - 5 - TopY) / LH));
-	const float TextX = PX + 10, TextWMax = PW - 20;
+	const int32 MaxLines = FMath::Max(1, FMath::FloorToInt32((IY - 5 - TopY) / LH));
 
 	TArray<FString> Lines;
 	for (int32 e = 0; e < Sus.Log.Num(); ++e)
 	{
 		const FNoirLine& L = Sus.Log[e];
-		const FString Full = L.bPlayer
-			? FString::Printf(TEXT("YOU: \"%s\""), *L.Text)
-			: FString::Printf(TEXT("%s: %s"), *First, *L.Text);
-		TArray<FString> Wrapped = Wrap(Full, TextWMax, Body);
-		if (!L.bPlayer && e == Sus.Log.Num() - 1)
+		if (Now < L.Time)
 		{
-			// Typewriter on the latest answer. Lines are laid out first so the reveal doesn't reflow.
-			int32 Remaining = FMath::FloorToInt32((Now - L.Time) * 50.0) + First.Len() + 2;
+			continue; // feedback waits until the spoken line has been typed out
+		}
+		FString Full;
+		switch (L.Kind)
+		{
+		case ENoirLineKind::Player: Full = FString::Printf(TEXT("YOU: \"%s\""), *L.Text); break;
+		case ENoirLineKind::Note:   Full = FString::Printf(TEXT("  * %s"), *L.Text); break;
+		default:                    Full = FString::Printf(TEXT("%s: %s"), *First, *L.Text); break;
+		}
+		TArray<FString> Wrapped = Wrap(Full, TextWMax, Body);
+		if (L.Kind == ENoirLineKind::Suspect)
+		{
+			// Typewriter. Lines are laid out first so the reveal doesn't reflow.
+			int32 Remaining = FMath::FloorToInt32(FMath::Min((Now - L.Time) * 50.0, 100000.0)) + First.Len() + 2;
 			for (FString& W : Wrapped)
 			{
 				const int32 Len = W.Len();
@@ -396,6 +480,54 @@ void ANoirHUD::DrawTalkPanel(UCanvas* C, const ANoirPlayerController& PC, double
 	{
 		Ink(C, Lines[i], TextX, Y, Body);
 		Y += LH;
+	}
+}
+
+void ANoirHUD::DrawNotebook(UCanvas* C, const ANoirPlayerController& PC)
+{
+	const FNoirSuspect& Sus = PC.Suspects[PC.Current];
+	const float PX = 40, PY = 36, PW = LX - 80, PH = LY - 52;
+	Box(C, PX, PY, PW, PH);
+
+	Ink(C, TEXT("NOTEBOOK"), PX + 10, PY + 8, Body * 1.4f);
+	const FString CloseL = TEXT("CLOSE [TAB]");
+	Button(C, CloseL, PX + PW - 6 - ButtonW(CloseL, Small), PY + 6, Small, ENoirAction::Notebook);
+
+	const TArray<FString> Ids = PC.NotebookIds();
+	const float TextX = PX + 10, TextWMax = PW - 20;
+	float Y = PY + 12 + LineH(Body * 1.4f);
+	if (Ids.Num() == 0)
+	{
+		InkWrapped(C, TEXT("Nothing yet. Get someone talking: what they give up is written here, and you can repeat it to the others."),
+			TextX, Y + 6, TextWMax, Body);
+		return;
+	}
+	Y = InkWrapped(C, FString::Printf(TEXT("Click a statement, or press its number, to repeat it to %s.  * = already told them."), *Sus.Name),
+		TextX, Y, TextWMax, Small) + 4;
+	Fill(C, PX + 6, Y, PW - 12, 1, InkColor);
+	Y += 4;
+
+	const float RowH = LineH(Body) + 2;
+	int32 HoveredEntry = INDEX_NONE;
+	for (int32 i = 0; i < Ids.Num(); ++i)
+	{
+		const FString Number = i < 9 ? FString::Printf(TEXT("[%d]"), i + 1) : FString(TEXT("[ ]"));
+		const TCHAR* Mark = PC.HasHeard(Ids[i]) ? TEXT("*") : TEXT(" ");
+		if (Hovered(PX + 6, Y, PW - 12, RowH))
+		{
+			HoveredEntry = i;
+		}
+		Row(C, FString::Printf(TEXT("%s%s %s"), *Number, Mark, *PC.EvidenceName(Ids[i])), PX + 6, Y, PW - 12, Body,
+			ENoirAction(int32(ENoirAction::Present0) + i));
+		Y += RowH;
+	}
+
+	// The full statement for the row under the mouse.
+	if (HoveredEntry != INDEX_NONE)
+	{
+		const float DY = PY + PH - 6 - LineH(Small) * 4;
+		Fill(C, PX + 6, DY - 4, PW - 12, 1, InkColor);
+		InkWrapped(C, PC.EvidenceText(Ids[HoveredEntry]), TextX, DY, TextWMax, Small);
 	}
 }
 

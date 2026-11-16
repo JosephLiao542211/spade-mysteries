@@ -42,6 +42,8 @@ private:
 	void Compose();
 
 	void DrawTalkPanel(UCanvas* C, const ANoirPlayerController& PC, double Now);
+	void DrawMeters(UCanvas* C, const ANoirPlayerController& PC);
+	void DrawNotebook(UCanvas* C, const ANoirPlayerController& PC);
 
 	// UI helpers. Coordinates are in a fixed 640x360 layout space, scaled to the real resolution.
 	void Fill(UCanvas* C, float X, float Y, float W, float H, const FLinearColor& Col);

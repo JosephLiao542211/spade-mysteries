@@ -23,12 +23,20 @@ You sit across a table from a suspect in a dark room and question them, then acc
 | File | Role |
 |---|---|
 | `NoirGameMode` | Sets the controller and HUD; no pawn. Default game mode for every map (`Config/DefaultEngine.ini`). |
-| `NoirPlayerController` | Case data (suspects, questions, answers, culprit), game state, and key bindings (legacy `BindKey`). Spawns `ANoirRoom` at z=-50000. |
+| `NoirPlayerController` | Game state and input. Loads the case through `UInterrogationSession` (`Source/Spade_mystery/Llm`, case JSON in `Content/Llm/Cases/SpadeClub`): the player **types** to the suspect in the talk panel, replies come from the local model, and the session owns meters, secrets, the notebook of statements and the endings. One legacy key binding per key feeds `HandleKey`, which either types a character or runs an action. Spawns `ANoirRoom` at z=-50000. |
 | `NoirRoom` | The 3D room, built at runtime from `/Engine/BasicShapes`: table, chair, a swaying lamp spotlight, a streetlight through venetian blinds, volumetric haze, and suspect figures. Owns a low-res HDR `SceneCaptureComponent2D`. Reads lighting, haze and camera values from the settings every tick. |
 | `NoirHUD` | 1-bit compositor. Each frame: capture the scene, draw the UI into a mask target (red = white ink, green = black box), read both back, apply exposure, gamma, contrast and the dither screen, upload to a nearest-filtered texture, and draw it integer-scaled. |
 | `NoirLookSettings` | **All tunables as sliders.** Project Settings → Game → **Noir Look**. Applies live during Play and saves to `Config/DefaultGame.ini`. |
 
 Main viewport world rendering is disabled; the screen shows only the HUD's composited texture.
+
+## Playing a case
+
+- **Controls:** `Space` begin; `T` talk; in the talk panel type a line and press `Enter`; `Down` closes it; `Left`/`Right` change suspect; `Tab` (or `N`) opens the notebook, where a number key or a click repeats a statement to whoever is in the chair; `X` accuse, then `Y`/`N`; `R` restart after an ending.
+- **Suspect order = Noir Look slot:** `case.json` lists Vera, Mickey, Graves, Tommy, Allison, Logan, which are `Suspect1`..`Suspect6`. Mickey Doyle uses the Tim clip in slot 2.
+- **Role and greeting lines** are in `CastSheet()` in `NoirPlayerController.cpp`, keyed by suspect id. Everything else about a suspect is in the case JSON.
+- **The model:** `ULlmServerSubsystem` starts `ThirdParty/llama/<build>/llama-server.exe` with a model from `Models/` (fetch with `Tools/fetch-models.ps1`; neither is committed). Windows only. On a Mac, start a llama-server by hand and set `bLaunchServer=False` and `ExternalServerUrl` under Project Settings > Game > Local LLM.
+- The reply's emotion picks the slot's mood clip (`angry`, `sad`, otherwise `relaxed`) when the slot has mood videos.
 
 ## Owner's tuning workflow
 
