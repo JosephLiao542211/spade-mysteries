@@ -1,0 +1,21 @@
+LIGHTS OUT AT THE BLACK SPADE
+Windows jam edition
+
+Extract the entire Black Spade folder from the ZIP, then open Black Spade.exe.
+Keep the files together. Allow at least 6 GB for the extracted game in addition
+to the download. The game opens in a browser window and runs on this PC.
+No account, Internet connection, Python installation or Unreal installation is
+needed to play.
+
+Read the briefing while the local dialogue model loads. Choose a witness, type
+a question and wait for their response. Watch fear and the second meter and
+check how the witness interpreted your line. When a witness makes a statement,
+the notebook records it. Try repeating that statement to another witness.
+Accusing a suspect ends the case. You can start a fresh case from the ending.
+
+The Windows x64 build includes Gemma 4 E4B, the Vulkan inference backend and a
+CPU backend. GPU inference requires a compatible Vulkan driver. On a CPU,
+loading and replies can take longer. If startup fails, check the model logs in
+%LOCALAPPDATA%\Black Spade\logs. Closing the game ends the current session.
+
+Third-party credits and licenses are in the licenses folder.

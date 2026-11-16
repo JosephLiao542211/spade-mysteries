@@ -1,0 +1,17 @@
+Gemma 4 E4B instruction-tuned model by Google. Q4_K_M GGUF quantization by
+Unsloth. Model weights are distributed under the Apache License, Version 2.0.
+Model: https://huggingface.co/google/gemma-4-E4B-it
+Quantization: https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/tree/bfc15c382204943c3a8fff0c750b94ae2364d7a3
+
+llama.cpp, release b12368, by the ggml authors, runs the model. The distribution
+includes the upstream MIT license and notices for bundled dependencies.
+https://github.com/ggml-org/llama.cpp/releases/tag/b12368
+
+CPython is distributed under the licenses in Python.txt. PyInstaller's Windows
+bootloader is distributed with its license and exception in PyInstaller.txt.
+The Microsoft Visual C++ runtime components are distributed with the Windows
+llama.cpp backends and have their original Microsoft copyright and version
+information. LLVM OpenMP's license and exceptions are in LLVM-OpenMP.txt.
+
+Instrument Serif is distributed under the SIL Open Font License. The license
+accompanies the fonts under static.

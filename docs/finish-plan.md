@@ -1,7 +1,25 @@
 # Finishing Spade Mystery
 
-Written 2026-11-15 from the state of the repo on that day. This is the shortest path from "three separate
-pieces" to "a build someone can download and play". Design detail stays in the two existing docs:
+## Play the Windows jam edition
+
+The local release is in `../Release/Black Spade/Black Spade.exe`. To share it, use
+`../Release/Black Spade Windows.zip`. Extract the whole folder and double-click the executable.
+The launcher opens a local game window and runs the bundled Gemma 4 E4B model on the player's PC.
+The game includes the six original suspect performances, typed interviews, witness meters, the notebook,
+accusations and all five case endings. Sound can be switched on in the game window.
+
+From the repository root, run `python Tools/jam-player/player.py` to play from source.
+To rebuild on Windows x64, use Python 3.14 with PyInstaller installed, the Visual Studio x64
+redistributable files, and the model and llama.cpp runtimes from `Tools/fetch-models.ps1`.
+Run `python Tools/jam-player/package.py`. The packager verifies the model hash and every ZIP member.
+
+Fable's Unreal integration is on `black-spade-game`. The portable edition uses the same case JSON,
+the project's Python interrogation engine, and 1-bit footage derived from the nine game clips.
+The native Unreal target still needs compilation and a packaged playtest on a machine with UE 5.8.
+
+## Original plan, November 15, 2026
+
+The following plan records the starting point before integration. Design detail stays in the two existing docs:
 `docs/llm-implementation-plan.md` (the model side) and `docs/cases/spade-club.md` (the case).
 
 ## 1. Where things stand

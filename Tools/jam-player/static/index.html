@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Lights Out at the Black Spade · Spade Mysteries</title>
+  <link rel="icon" href="art/vera_lane-portrait.png">
+  <link rel="stylesheet" href="game.css">
+  <script src="visuals.js" defer></script>
+  <script src="game.js" defer></script>
+  <script src="sound.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="playing-card" aria-hidden="true">♠</span><span>Spade Mysteries</span></div>
+    <nav aria-label="Case tools">
+      <button type="button" id="file-button" class="quiet nav-button">Case file</button>
+      <button type="button" id="notes-button" class="quiet nav-button" hidden>Notebook <span id="notes-count">0</span></button>
+      <button type="button" id="sound-toggle" class="quiet audio-button" aria-label="Turn room sound on" aria-pressed="false" title="Turn room sound on"><span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="sound-label">Sound off</span></button>
+    </nav>
+  </header>
+  <main id="game">
+    <section id="briefing" aria-labelledby="game-title">
+      <div class="cover">
+        <div class="cover-art" aria-hidden="true"><img src="art/vera_lane.png" id="cover-photo" alt="" width="608" height="354"></div>
+        <div class="cover-copy">
+          <div class="eyebrow ruled"><span></span> Homicide <i>/</i> Case no. 01</div>
+          <h1 id="game-title">Lights Out <em>at the Black Spade</em></h1>
+          <p class="cover-lede">The lights went out at eleven. The band kept playing. Ten minutes later, the owner was found shot dead upstairs.</p>
+          <div class="begin-row"><button type="button" class="primary" id="begin-button" disabled>Begin investigation <span aria-hidden="true">→</span></button><button type="button" id="brief-retry" class="subtle-button" hidden>Retry</button></div>
+          <p id="brief-status" class="status" role="status">Opening the case file…</p>
+        </div>
+        <div class="photo-caption" aria-hidden="true"><span>Fig. 01</span><span>The Black Spade Club, 1931</span></div>
+      </div>
+      <div class="roster-heading"><h2>Held for questioning</h2><span class="eyebrow">Witness register</span></div>
+      <div id="brief-roster" class="cast-grid" aria-label="Suspect register"></div>
+    </section>
+    <section id="interview" aria-labelledby="suspect-name" hidden>
+      <div class="case-heading"><div><div class="eyebrow ruled"><span></span> Case no. 01 <i>/</i> Interview room</div><h2>Lights Out <em>at the Black Spade</em></h2></div><button type="button" id="accuse-button" class="subtle-button">Make an accusation <span aria-hidden="true">↗</span></button></div>
+      <div class="interview-board">
+        <div class="seat">
+          <div class="seat-stage"><img id="seat-photo" src="art/vera_lane.png" width="608" height="354" alt=""><span class="corner t"></span><span class="corner b"></span></div>
+          <div class="seat-details"><div class="name-card"><span class="eyebrow" id="seat-number">Seat 01</span><h3 id="suspect-name"></h3><p id="suspect-role"></p></div><div id="meters" class="meters" aria-label="Suspect meters"></div></div>
+        </div>
+        <div class="dialogue-panel">
+          <div class="panel-heading"><h3>Interview transcript</h3><span id="turn-count" class="eyebrow"></span></div>
+          <div id="transcript" class="transcript" role="log" aria-live="polite" tabindex="0"></div>
+          <div id="tactic" class="tactic" hidden></div>
+          <button type="button" id="clue" class="clue" hidden></button>
+          <form id="question-form" class="question-form">
+            <label for="question">Your question</label>
+            <div class="input-row"><input id="question" type="text" maxlength="300" required autocomplete="off" placeholder="Ask about the blackout…" spellcheck="true"><button type="submit" class="send" id="ask-button">Ask <span aria-hidden="true">↵</span></button></div>
+          </form>
+          <p id="interview-status" class="status" role="status"></p><button type="button" id="interview-retry" class="subtle-button" hidden>Reconnect</button>
+        </div>
+      </div>
+      <div class="roster-heading"><h2>Interview another suspect</h2><span class="eyebrow">Witness register</span></div>
+      <div id="seat-roster" class="cast-grid"></div>
+    </section>
+    <section id="ending" aria-labelledby="ending-title" hidden>
+      <div class="closing-record">
+        <div class="eyebrow ruled"><span></span> Case no. 01 <i>/</i> Final report</div>
+        <div class="ending-spade" aria-hidden="true">♠</div>
+        <h1 id="ending-title"></h1><p id="ending-text"></p><div id="epilogues"></div>
+        <button type="button" id="restart" class="primary">Reopen the case <span aria-hidden="true">↻</span></button>
+      </div>
+    </section>
+  </main>
+  <footer><span>♠ &nbsp; The Black Spade Club</span><span>1931</span></footer>
+  <dialog id="case-dialog" aria-labelledby="case-dialog-title">
+    <div class="dialog-head"><span class="eyebrow">Case no. 01</span><button type="button" class="close-dialog" aria-label="Close case file">×</button></div>
+    <h2 id="case-dialog-title">The case file</h2>
+    <p id="case-setting"></p>
+    <h3>At the table</h3><p>Question the six suspects in any order. Watch their fear and personality meters. New statements go in your notebook. You can quote a witness to someone else, but word travels.</p>
+    <p>When you can establish a motive, the gun and who left the stage, make your accusation. A confession can also close the case.</p>
+    <button type="button" class="primary close-action">Return <span aria-hidden="true">→</span></button>
+  </dialog>
+  <dialog id="notebook-dialog" aria-labelledby="notebook-title">
+    <div class="dialog-head"><span class="eyebrow">Detective's notes</span><button type="button" class="close-dialog" aria-label="Close notebook">×</button></div>
+    <h2 id="notebook-title">Witness statements</h2><p id="notebook-hint"></p><div id="notebook-list"></div>
+  </dialog>
+  <dialog id="accuse-dialog" aria-labelledby="accuse-title">
+    <div class="dialog-head"><span class="eyebrow">Charge sheet</span><button type="button" class="close-dialog" aria-label="Close charge sheet">×</button></div>
+    <h2 id="accuse-title">Make an accusation</h2>
+    <p id="charge-hint">Name the person responsible for Jimmy Calloway’s murder. Filing the charge closes the investigation.</p>
+    <label class="form-label" for="accused">Accused suspect</label><select id="accused"></select>
+    <div class="dialog-actions"><button type="button" class="primary" id="file-charge">File accusation <span aria-hidden="true">→</span></button><button type="button" class="subtle-button close-action">Keep investigating</button></div>
+  </dialog>
+  <noscript>This game needs JavaScript to run the interviews.</noscript>
+</body>
+</html>
+
+
+
